@@ -151,7 +151,10 @@ code.inline, .cmd { font-family: ui-monospace, 'Cascadia Mono', monospace; font-
 
 /* footer */
 .site-footer { border-top: 1px solid var(--line); padding: 54px 0 40px; color: var(--dim); font-size: 14px; }
-.footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 30px; }
+.footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 30px; }
+.footer-grid a.kofi-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 2px; padding: 6px 12px 6px 9px; border-radius: 999px; background: #ff5e5b; color: #fff; font-weight: 600; font-size: 13.5px; }
+.footer-grid a.kofi-link:hover { background: #ff7472; color: #fff; }
+.footer-grid a.kofi-link img { background: #fff; border-radius: 6px; padding: 2px; box-sizing: content-box; }
 @media (max-width: 760px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
 .footer-grid h4 { color: var(--text); font-size: 14px; margin: 0 0 12px; }
 .footer-grid a { display: block; padding: 3px 0; }

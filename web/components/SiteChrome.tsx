@@ -55,6 +55,13 @@ export function SiteFooter() {
             <a href="https://github.com/BenScriptsRBX/IngrainedCut" rel="noopener">Source code (AGPL-3.0)</a>
           </div>
           <div>
+            <h4>Support</h4>
+            <a className="kofi-link" href="https://ko-fi.com/ingrainedcut" target="_blank" rel="noopener noreferrer">
+              <img src="/kofi-cup.png" alt="" width={24} height={19} />
+              Support on Ko-fi
+            </a>
+          </div>
+          <div>
             <h4>Contact</h4>
             <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>
           </div>

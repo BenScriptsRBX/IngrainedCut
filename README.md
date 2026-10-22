@@ -8,6 +8,8 @@
 
 <p align="center">
   <a href="https://ingrainedcut.vercel.app"><img src="https://img.shields.io/badge/Open_IngrainedCut-ingrainedcut.vercel.app-8b5cf6?style=for-the-badge" alt="Open IngrainedCut at ingrainedcut.vercel.app"></a>
+  &nbsp;
+  <a href="https://ko-fi.com/ingrainedcut"><img src="docs/kofi-button.svg" alt="Support IngrainedCut on Ko-fi" height="28"></a>
 </p>
 
 <p align="center">
@@ -250,6 +252,12 @@ npm run helper
 | `src/components/` | UI panels |
 
 `sample-media/` holds a few generated test clips you can import to try things out.
+
+## Support
+
+IngrainedCut is free and open source. If it saves you time, you can support its development on Ko-fi:
+
+<a href="https://ko-fi.com/ingrainedcut"><img src="docs/kofi-button.svg" alt="Support IngrainedCut on Ko-fi" height="30"></a>
 
 ## Contributing
 

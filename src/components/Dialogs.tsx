@@ -684,6 +684,9 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <p>A non-linear video editor with AI built in.</p>
         <p className="dim">Electron · React · FFmpeg · Claude Agent SDK · MCP</p>
         <p>
+          <a onClick={() => window.icut.openExternal('https://ko-fi.com/ingrainedcut')}>Support IngrainedCut on Ko-fi ☕</a>
+        </p>
+        <p>
           {isSite ? (
             <a href="/licenses" target="_blank" rel="noopener">
               Open-source licenses

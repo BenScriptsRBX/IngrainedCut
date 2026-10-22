@@ -1,0 +1,37 @@
+{
+  "name": "ingrainedcut-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build:editor": "npm --prefix .. ci --include=dev --ignore-scripts --no-audit --no-fund && node scripts/build-editor.mjs",
+    "build": "npm run build:editor && node scripts/notices.mjs && node scripts/pack-helper.mjs && node scripts/migrate.mjs && next build",
+    "start": "next start",
+    "migrate": "node scripts/migrate.mjs",
+    "editor": "node scripts/build-editor.mjs",
+    "helper": "node scripts/pack-helper.mjs",
+    "notices": "node scripts/notices.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "better-auth": "^1.7.12",
+    "kysely": "^0.29.7",
+    "kysely-neon": "^3.0.0",
+    "next": "^16.4.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@electric-sql/pglite-socket": "^0.2.14",
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "kysely-pglite-dialect": "^1.4.0",
+    "pg": "^8.23.1",
+    "typescript": "^7.0.2"
+  },
+  "license": "AGPL-3.0-or-later"
+}

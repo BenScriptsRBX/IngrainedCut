@@ -1,0 +1,24 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# secrets and deployment links (web/.env.example is the template to copy)
+.vercel
+.env*
+!.env.example
+
+# local data and generated output
+web/.data/
+web/public/editor/
+web/public/helper/
+web/public/third-party-licenses.txt
+*.tgz
+
+# files other tools add to a working folder
+.claude/
+.agents/
+skills-lock.json
+.cursor/
+.ingrainedcut/
+compositions/

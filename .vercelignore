@@ -1,0 +1,22 @@
+# Uploaded to Vercel: the website (web/) plus the editor sources it builds (src/, index.html, vite/ts config, root package files).
+node_modules
+/dist
+/build
+sample-media
+*.log
+*.icut
+compositions
+.ingrainedcut
+.cursor
+web/node_modules
+web/.next
+web/.data
+web/public/editor
+web/.env*.local
+web/.env
+.env*.local
+.vercel
+.claude
+.agents
+skills-lock.json
+web/public/helper

@@ -39,7 +39,7 @@ The easiest way to use IngrainedCut is the website: **https://ingrainedcut.verce
 3. To edit with AI (Claude, Codex or Cursor, with your own account), run the free helper on your computer:
 
    ```bash
-   npx -y https://ingrainedcut.vercel.app/helper/ingrainedcut-0.2.5.tgz
+   npx -y https://ingrainedcut.vercel.app/helper/ingrainedcut-0.2.6.tgz
    ```
 
    The exact command for the current version is always on the [setup page](https://ingrainedcut.vercel.app/download).

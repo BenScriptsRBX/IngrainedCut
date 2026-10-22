@@ -5,9 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { EDITOR_GUIDE } from './agent.mjs';
 import { userDataDir } from './paths.mjs';
+import { findPackage, importPackage, npmInstall } from './runtimePackages.mjs';
 import { TOOL_DEFS } from './tools.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -149,46 +150,23 @@ class CliAgent {
 const CODEX_SDK = '@openai/codex-sdk@0.163.0';
 const codexDir = () => path.join(userDataDir(), 'agents');
 
-function findPackage(name) {
-  for (const start of [path.dirname(fileURLToPath(import.meta.url)), codexDir()]) {
-    for (let d = start; ; d = path.dirname(d)) {
-      const dir = path.join(d, 'node_modules', ...name.split('/'));
-      if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
-      if (path.dirname(d) === d) break;
-    }
-  }
-  return null;
-}
+const findCodexSdk = () => findPackage('@openai/codex-sdk', codexDir());
 
 async function loadCodexSdk() {
-  const dir = findPackage('@openai/codex-sdk');
+  const dir = findCodexSdk();
   if (!dir) throw new Error('CODEX_MISSING');
-  const entry = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).exports['.'].import;
-  return import(pathToFileURL(path.join(dir, entry)).href);
+  return importPackage(dir);
 }
 
 /** Install Codex into the app data folder (first use), streaming npm's output. */
-export function installCodex(onLine) {
-  fs.mkdirSync(codexDir(), { recursive: true });
-  const pkg = path.join(codexDir(), 'package.json');
-  if (!fs.existsSync(pkg)) fs.writeFileSync(pkg, JSON.stringify({ name: 'ingrainedcut-agents', private: true }, null, 2));
-  return new Promise((resolve) => {
-    const proc = spawn(isWin ? 'npm.cmd' : 'npm', ['install', CODEX_SDK, '--no-audit', '--no-fund', '--loglevel', 'http'], { cwd: codexDir(), windowsHide: true, shell: isWin });
-    let out = '';
-    const take = (d) => {
-      out += d.toString();
-      for (const line of d.toString().split(/\r?\n/)) if (line.trim()) onLine(line.trim().slice(0, 200));
-    };
-    proc.stdout.on('data', take);
-    proc.stderr.on('data', take);
-    proc.on('error', (e) => resolve({ ok: false, out: e.message }));
-    proc.on('close', (code) => resolve({ ok: code === 0 && !!codexBinary(), out: out.slice(-2000) }));
-  });
+export async function installCodex(onLine) {
+  const r = await npmInstall(codexDir(), [CODEX_SDK], { onLine });
+  return { ok: r.ok && !!codexBinary(), out: r.out };
 }
 
 export function codexBinary() {
   try {
-    const sdk = findPackage('@openai/codex-sdk');
+    const sdk = findCodexSdk();
     if (!sdk) return null;
     const codexPkg = createRequire(path.join(sdk, 'package.json')).resolve('@openai/codex/package.json');
     const plat = createRequire(codexPkg).resolve(`@openai/codex-${process.platform}-${process.arch}/package.json`);

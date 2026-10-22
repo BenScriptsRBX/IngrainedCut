@@ -5,22 +5,43 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { userDataDir } from './paths.mjs';
+import { findPackage, npmInstall, runtimeDir, versionOf } from './runtimePackages.mjs';
 
 const require = createRequire(import.meta.url);
 
-/** An explicit override, else the FFmpeg on PATH, else the copy bundled with the npx helper (optional dependency). */
-function findTool(envVar, name, bundled) {
+/** An explicit override, else the FFmpeg on PATH, else an npm build (node_modules, or fetched by ensureFfmpeg); null if none. */
+function findTool(envVar, name, npmBuild) {
   if (process.env[envVar]) return process.env[envVar];
   if (spawnSync(name, ['-version'], { windowsHide: true }).status === 0) return name;
   try {
-    const p = bundled();
+    const p = npmBuild();
     if (p && fs.existsSync(p)) return p;
   } catch {}
-  return name;
+  return null;
 }
 
-export const FFMPEG = findTool('ICUT_FFMPEG', 'ffmpeg', () => require('ffmpeg-static'));
-export const FFPROBE = findTool('ICUT_FFPROBE', 'ffprobe', () => require('@ffprobe-installer/ffprobe').path);
+const findFfmpeg = () => findTool('ICUT_FFMPEG', 'ffmpeg', () => require(findPackage('ffmpeg-static', runtimeDir('ffmpeg'))));
+const findFfprobe = () => findTool('ICUT_FFPROBE', 'ffprobe', () => require(findPackage('@ffprobe-installer/ffprobe', runtimeDir('ffmpeg'))).path);
+let found = [findFfmpeg(), findFfprobe()];
+export let FFMPEG = found[0] ?? 'ffmpeg';
+export let FFPROBE = found[1] ?? 'ffprobe';
+let fetching = null; // the download below; run() waits for it
+
+/** No FFmpeg on this computer: download the npm builds (~80 MB) in the background. Null when there's nothing to fetch. */
+export function ensureFfmpeg() {
+  if (fetching || (found[0] && found[1])) return fetching;
+  const specs = ['ffmpeg-static', '@ffprobe-installer/ffprobe'].map((n) => `${n}@${versionOf(n)}`);
+  fetching = npmInstall(runtimeDir('ffmpeg'), specs).then(() => {
+    found = [findFfmpeg(), findFfprobe()];
+    FFMPEG = found[0] ?? 'ffmpeg';
+    FFPROBE = found[1] ?? 'ffprobe';
+    fetching = null;
+    return !!(found[0] && found[1]);
+  });
+  return fetching;
+}
+
+export const ffmpegFetching = () => !!fetching;
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.tif', '.tiff']);
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.aac', '.m4a', '.flac', '.ogg', '.opus', '.wma', '.aiff', '.aif']);
@@ -40,7 +61,11 @@ export function cacheKey(filePath) {
   return crypto.createHash('sha1').update(filePath + stamp).digest('hex').slice(0, 16);
 }
 
-export function run(cmd, args, { onStderr, stdoutBuffer = false, signal } = {}) {
+export async function run(cmd, args, { onStderr, stdoutBuffer = false, signal } = {}) {
+  if (fetching && (cmd === 'ffmpeg' || cmd === 'ffprobe')) {
+    await fetching;
+    cmd = cmd === 'ffmpeg' ? FFMPEG : FFPROBE;
+  }
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args, { windowsHide: true });
     const out = [];

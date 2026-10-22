@@ -15,6 +15,8 @@ import { WebSocketServer } from 'ws';
 import { createCore, ROOT } from '../electron/core.mjs';
 import { openMedia } from '../electron/mediaServe.mjs';
 import { documentsDir } from '../electron/paths.mjs';
+import { claudeSdk, claudeSdkInstalled } from '../electron/runtimePackages.mjs';
+import { ensureFfmpeg } from '../electron/media.mjs';
 import { openFiles, saveFile, revealInFolder, openUrl } from './dialogs.mjs';
 
 const argv = process.argv.slice(2);
@@ -234,12 +236,24 @@ server.listen(port, '127.0.0.1', () => {
   if (site) console.log(`  Open your projects: ${site}`);
   if (LOCAL_EDITOR) console.log(`  Local editor (private link): ${local}`);
   console.log(`\n  Keep this window open while you edit — an open editor tab connects by itself. Ctrl+C to stop.\n`);
+  prefetch();
   // only open a tab when asked (--open), or in local mode where the private link is the way in
   if (flag('--no-open')) return;
   if (flag('--local') || !site) {
     if (LOCAL_EDITOR) openUrl(local);
   } else if (flag('--open')) openUrl(site);
 });
+
+/** First run: fetch the Claude Agent SDK and (without one on this computer) FFmpeg while the editor is already usable. */
+function prefetch() {
+  const jobs = [];
+  if (!claudeSdkInstalled()) jobs.push(['the Claude Agent SDK', claudeSdk()]);
+  const ff = ensureFfmpeg();
+  if (ff) jobs.push(['FFmpeg', ff.then((ok) => ok || Promise.reject(new Error('install FFmpeg yourself, or try again later')))]);
+  if (!jobs.length) return;
+  console.log(`  First run: downloading ${jobs.map((j) => j[0]).join(' and ')} in the background…`);
+  for (const [name, p] of jobs) p.then(() => console.log(`  ✓ ${name} is ready.`), (e) => console.log(`  ✗ Couldn't download ${name}: ${e?.message?.split('\n')[0] || e}`));
+}
 
 const stop = () => {
   core.shutdown();

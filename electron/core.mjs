@@ -4,15 +4,15 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { probe, makeThumbnails, makeAudioAssets, detectSilence, detectScenes, transcribe, loudness, run, FFMPEG } from './media.mjs';
+import { probe, makeThumbnails, makeAudioAssets, detectSilence, detectScenes, transcribe, loudness, run, FFMPEG, ffmpegFetching } from './media.mjs';
 import { startExport, writeFrame, finishExport, cancelExport, writeTempWav, wcStart, wcChunk, wcFinish, wcCancel } from './exporter.mjs';
 import { getSettings, saveSettings, addRecentProject } from './settings.mjs';
 import { AgentManager } from './agent.mjs';
 import { findClaudeCode, CLAUDE_CODE_INSTALL } from './claudeCode.mjs';
 import { CodexAgent, CursorAgent, providerStatus, providerLogin, cancelProviderLogin, providerModels, installCodex } from './otherAgents.mjs';
-import { listSessions, getSessionMessages, getSessionInfo, forkSession } from '@anthropic-ai/claude-agent-sdk';
 import { TOOL_DEFS } from './tools.mjs';
 import { startBridge, BRIDGE_FILE } from './bridge.mjs';
+import { claudeSdk } from './runtimePackages.mjs';
 import { mediaUrl } from './mediaServe.mjs';
 import { userDataDir, documentsDir } from './paths.mjs';
 
@@ -213,7 +213,7 @@ export function createCore(host) {
 
   // ---------- existing Claude Code conversations ----------
   handle('sessions:list', async () => {
-    const list = await listSessions({ limit: 100 });
+    const list = await (await claudeSdk()).listSessions({ limit: 100 });
     return list
       .sort((a, b) => b.lastModified - a.lastModified)
       .map((x) => ({ sessionId: x.sessionId, title: x.customTitle || x.summary || x.firstPrompt || 'Untitled', lastModified: x.lastModified, cwd: x.cwd, gitBranch: x.gitBranch }));
@@ -229,7 +229,7 @@ export function createCore(host) {
   }
 
   handle('sessions:transcript', async (sessionId) => {
-    const msgs = await getSessionMessages(sessionId);
+    const msgs = await (await claudeSdk()).getSessionMessages(sessionId);
     const parts = [];
     for (const m of msgs) {
       if (m.parent_tool_use_id || (m.type !== 'user' && m.type !== 'assistant')) continue;
@@ -244,6 +244,7 @@ export function createCore(host) {
   });
 
   handle('sessions:continue', async (sessionId) => {
+    const { getSessionInfo, forkSession } = await claudeSdk();
     const info = await getSessionInfo(sessionId);
     const fork = await forkSession(sessionId, { title: `${info?.customTitle || info?.summary || 'Chat'} (IngrainedCut)` });
     if (provider() !== 'claude') {
@@ -408,7 +409,7 @@ export function createCore(host) {
   handle('app:info', async () => {
     let ffmpegOk = true;
     try {
-      await run(FFMPEG, ['-version']);
+      if (!ffmpegFetching()) await run(FFMPEG, ['-version']); // a background download counts as there
     } catch {
       ffmpegOk = false;
     }

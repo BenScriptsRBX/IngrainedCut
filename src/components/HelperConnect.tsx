@@ -118,7 +118,7 @@ export function HelperChip() {
         connectHelper();
       } else setFound(true);
     };
-    const t = setInterval(tick, 4000);
+    const t = setInterval(tick, 1500);
     return () => {
       stop = true;
       clearInterval(t);

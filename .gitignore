@@ -22,3 +22,4 @@ skills-lock.json
 .cursor/
 .ingrainedcut/
 compositions/
+web/.helper-build/

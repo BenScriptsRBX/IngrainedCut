@@ -1,9 +1,9 @@
 // The in-app Claude chat: a long-lived Claude Code session (Agent SDK) with the IngrainedCut
 // MCP tools attached in-process. Messages stream to the renderer's chat panel.
-import { query, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { TOOL_DEFS, SERVER_INSTRUCTIONS } from './tools.mjs';
 import { EDITOR_GUIDE } from './guide.mjs';
 import { findClaudeCode, CLAUDE_CODE_INSTALL } from './claudeCode.mjs';
+import { claudeSdk } from './runtimePackages.mjs';
 
 export { EDITOR_GUIDE };
 
@@ -118,6 +118,7 @@ export class AgentManager {
   }
 
   buildServer() {
+    const { createSdkMcpServer, tool } = this.sdk;
     return createSdkMcpServer({
       name: SERVER,
       version: '0.1.0',
@@ -153,7 +154,7 @@ export class AgentManager {
     this.resume = null;
     // a resumed session keeps its own recorded system prompt, so the editor instructions ride on the first message
     this.introPending = !!resume;
-    this.q = query({
+    this.q = this.sdk.query({
       prompt: this.input,
       options: {
         // the user's own Claude Code install (their sign-in or API key, their skills and settings)
@@ -306,7 +307,16 @@ export class AgentManager {
     }
   }
 
-  send({ text, context, images = [] }) {
+  async send({ text, context, images = [] }) {
+    if (!this.sdk) {
+      try {
+        this.sdk = await claudeSdk(); // the npx helper downloads it on first use
+      } catch (e) {
+        this.o.emit('agent:event', { type: 'error', message: e?.message || String(e) });
+        this.o.emit('agent:event', { type: 'idle' });
+        return;
+      }
+    }
     if (!this.ensure()) {
       this.o.emit('agent:event', { type: 'idle' });
       return;

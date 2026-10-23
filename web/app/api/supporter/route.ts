@@ -7,5 +7,5 @@ export async function GET() {
   const user = await apiUser();
   if (!user) return unauthorized();
   const s = await supporterStatus(user);
-  return NextResponse.json({ adFree: s.adFree, price: s.price, kofiUrl: s.kofiUrl, ad: s.adFree ? null : editorAd() }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ adFree: s.adFree, offered: s.offered, price: s.price, kofiUrl: s.kofiUrl, ad: s.adFree ? null : editorAd() }, { headers: { 'Cache-Control': 'no-store' } });
 }

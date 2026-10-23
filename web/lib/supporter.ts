@@ -20,6 +20,9 @@ export function editorAd() {
   return process.env.VERCEL_ENV === 'production' ? null : { placeholder: true as const };
 }
 
+/** The ad-free offer only makes sense once the editor really shows ads and Ko-fi payments can reach us. */
+export const adFreeOffered = () => !!(adsenseClient() && process.env.ADSENSE_EDITOR_SLOT?.trim() && process.env.KOFI_VERIFICATION_TOKEN);
+
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I/L
 const CODE_RE = /\bIC-([A-Z2-9]{6})\b/i;
 
@@ -50,7 +53,7 @@ export async function supporterStatus(user: { id: string; email: string }) {
     .where('user_id', '=', user.id)
     .executeTakeFirstOrThrow();
   const paid = Number(total);
-  return { adFree: paid >= AD_FREE_PRICE, paid, price: AD_FREE_PRICE, code: await supporterCode(user.id), kofiUrl: KOFI_URL };
+  return { adFree: paid >= AD_FREE_PRICE, offered: adFreeOffered(), paid, price: AD_FREE_PRICE, code: await supporterCode(user.id), kofiUrl: KOFI_URL };
 }
 
 /** The fields of Ko-fi's webhook payload this uses. */

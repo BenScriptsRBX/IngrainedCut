@@ -7,6 +7,7 @@ import { toast } from '../store';
 type Ad = { client: string; slot: string } | { placeholder: true };
 interface Supporter {
   adFree: boolean;
+  offered: boolean; // ads and Ko-fi are both set up, so "Remove ads" can work
   price: number;
   kofiUrl: string;
   ad: Ad | null;
@@ -63,9 +64,13 @@ export function AdBar() {
     <div className="ad-bar">
       <span className="ad-label">Advertisement</span>
       <div className="ad-slot">{'placeholder' in s.ad ? <div className="ad-unit ad-placeholder">Ad space · 728 × 90 (AdSense isn’t set up yet)</div> : <AdSenseUnit client={s.ad.client} slot={s.ad.slot} />}</div>
-      <a className="ad-remove" href="/account#ad-free" target="_blank" rel="noopener">
-        Remove ads — ${s.price} on Ko-fi
-      </a>
+      {s.offered ? (
+        <a className="ad-remove" href="/account#ad-free" target="_blank" rel="noopener">
+          Remove ads — ${s.price} on Ko-fi
+        </a>
+      ) : (
+        <span className="ad-remove" />
+      )}
     </div>
   );
 }

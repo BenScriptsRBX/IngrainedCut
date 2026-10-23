@@ -34,14 +34,15 @@ export default async function AccountPage() {
             </tr>
           </tbody>
         </table>
-        <h2 id="ad-free">Ad-free editor</h2>
+        {/* shown once the ad-free offer is live (lib/supporter.ts), and always to anyone who has already paid */}
+        {(supporter.offered || supporter.adFree) && <h2 id="ad-free">Ad-free editor</h2>}
         {supporter.adFree ? (
           <div className="supporter on">
             <p>
               <b>Thank you for supporting IngrainedCut!</b> The editor shows no ads on this account.
             </p>
           </div>
-        ) : (
+        ) : supporter.offered ? (
           <div className="supporter">
             <p>
               The editor shows a small ad. Support IngrainedCut with <b>${supporter.price}</b> or more on Ko-fi and the ads are gone for good on this account.
@@ -54,7 +55,7 @@ export default async function AccountPage() {
               <img src="/kofi-cup.png" alt="" width={24} height={19} /> Support on Ko-fi
             </a>
           </div>
-        )}
+        ) : null}
         <h2>Your data</h2>
         <p>
           We store your name, email, profile picture and your projects&apos; timelines. Your media files stay on your computer. See the{' '}

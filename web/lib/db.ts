@@ -13,8 +13,34 @@ export interface ProjectsTable {
   updated_at: Generated<Date>;
 }
 
+export interface SupporterCodeTable {
+  user_id: string;
+  code: string;
+  created_at: Generated<Date>;
+}
+
+export interface KofiPaymentTable {
+  transaction_id: string;
+  email: string; // lower-cased
+  amount: string; // numeric: Postgres returns it as a string
+  currency: string;
+  type: string; // Donation, Subscription, Shop Order, Commission
+  user_id: string | null;
+  paid_at: Date;
+  received_at: Generated<Date>;
+}
+
+/** Better Auth's table; only the columns this app reads. */
+export interface UserTable {
+  id: string;
+  email: string;
+}
+
 export interface DB {
+  user: UserTable;
   project: ProjectsTable;
+  supporter_code: SupporterCodeTable;
+  kofi_payment: KofiPaymentTable;
 }
 
 const globalForDb = globalThis as unknown as { __icutDb?: Promise<Kysely<DB>> };

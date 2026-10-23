@@ -76,6 +76,14 @@ export default function Terms() {
           The Service is currently offered free of charge as early-access software and may change, be interrupted or be discontinued. If we introduce paid features,
           we will tell you in advance and you will not be charged without agreeing to the price.
         </p>
+        <p>
+          <b>Ads and the ad-free editor.</b> The free editor on the website shows ads, provided by Google AdSense. You can remove them by supporting {SITE.name} on
+          Ko-fi with a total of at least $2 [OR THE EQUIVALENT IN YOUR KO-FI CURRENCY]: ads are then turned off in the editor for the account we match the payment
+          to (by the code on your account page in your Ko-fi message, or by your email address). Support is voluntary and is not a purchase of software, a licence
+          or any other feature; the ad-free editor lasts for as long as we run the Service with ads. Payments are processed by Ko-fi under its own terms and, except
+          where the law requires otherwise, are non-refundable. If a payment can’t be matched to your account, contact us at{' '}
+          <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>. [HAVE YOUR LAWYER CHECK REFUND AND CONSUMER-LAW WORDING.]
+        </p>
 
         <h2>8. Termination</h2>
         <p>

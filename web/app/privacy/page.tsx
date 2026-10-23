@@ -24,7 +24,7 @@ export default function Privacy() {
             <li>Your video, audio and images stay on your computer — we never receive them.</li>
             <li>We store your Google account basics (name, email, profile picture) and the project timelines you save.</li>
             <li>AI requests go from your computer straight to the AI provider you choose, under your account with them.</li>
-            <li>Only essential cookies. No advertising, no selling or sharing of personal information.</li>
+            <li>The editor shows an ad from Google AdSense, which uses cookies — unless you removed ads by supporting us on Ko-fi.</li>
           </ol>
         </div>
 
@@ -64,6 +64,18 @@ export default function Privacy() {
               <td>Contract</td>
             </tr>
             <tr>
+              <td>Ko-fi payments: transaction ID, payer email, amount, currency, payment type and date, and the code from your Ko-fi message (the rest of the message is not stored)</td>
+              <td>Ko-fi, when you support us</td>
+              <td>Turn off ads in the editor for your account</td>
+              <td>Contract</td>
+            </tr>
+            <tr>
+              <td>Advertising data: cookies and similar identifiers, IP address, device and browser information, and the ads shown and clicked</td>
+              <td>Google AdSense, in the editor</td>
+              <td>Show ads that fund the Service, measure them and prevent ad fraud</td>
+              <td>Consent where required (EEA/UK/Switzerland); legitimate interests elsewhere [CONFIRM]</td>
+            </tr>
+            <tr>
               <td>Messages you send us</td>
               <td>You</td>
               <td>Support</td>
@@ -84,18 +96,31 @@ export default function Privacy() {
           policies, not ours.
         </p>
 
-        <h2>4. Cookies</h2>
+        <h2>4. Cookies and advertising</h2>
         <p>
-          We use only cookies that are strictly necessary to sign you in and keep your session secure. We do not use advertising or analytics cookies. [IF YOU ADD
-          ANALYTICS, UPDATE THIS SECTION AND ADD CONSENT WHERE REQUIRED.]
+          We use cookies that are strictly necessary to sign you in and keep your session secure. The editor also shows an ad from Google AdSense. Google and its
+          partners use cookies to serve ads based on your visits to this and other websites, to limit how often you see an ad and to measure ads. Learn how Google
+          uses this information at{' '}
+          <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">
+            policies.google.com/technologies/partner-sites
+          </a>
+          , and turn off personalised ads at{' '}
+          <a href="https://adssettings.google.com" target="_blank" rel="noopener noreferrer">
+            adssettings.google.com
+          </a>
+          . In the EEA, the UK and Switzerland we ask for your consent before personalised ads are shown. Ads appear only in the editor, never on your exported
+          videos, and you can remove them for good by supporting IngrainedCut on Ko-fi (see your <Link href="/account#ad-free">account page</Link>). We do not use
+          analytics cookies.
         </p>
 
         <h2>5. Who we share data with</h2>
-        <p>We do not sell or share personal information for advertising. We use service providers that process data on our behalf:</p>
+        <p>We do not sell your personal information for money. We use service providers that process data on our behalf:</p>
         <ul>
           <li>Vercel Inc. — website hosting [REGION]</li>
           <li>[DATABASE PROVIDER, e.g. Neon] — database hosting [REGION]</li>
           <li>Google — sign-in</li>
+          <li>Google — advertising in the editor (AdSense), which collects the advertising data above directly through its cookies</li>
+          <li>Ko-fi Labs Limited — supporter payments (Ko-fi handles the payment; we receive the details listed above, never your card or PayPal details)</li>
         </ul>
         <p>We may also disclose data if required by law or to protect the rights, safety and security of users and the Service.</p>
 
@@ -109,13 +134,16 @@ export default function Privacy() {
         <p>
           We keep your account and saved projects while your account is active. Deleted projects are removed from our database immediately [AND FROM BACKUPS WITHIN
           N DAYS]. Session records expire after 30 days. When you delete your account we delete your account data and projects [WITHIN N DAYS].
+          Ko-fi payment records are kept as financial records for [N YEARS — CHECK YOUR TAX RULES]; deleting your account unlinks them from it.
         </p>
 
         <h2>8. Your rights</h2>
         <p>
           Depending on where you live, you may have the right to access, correct, delete or export your personal data, to object to or restrict certain processing,
-          and to complain to your data protection authority. California residents have the right to know, delete and correct personal information and to
-          non-discrimination; we do not sell or share personal information. To exercise your rights, email <a href={`mailto:${S.privacyEmail}`}>{S.privacyEmail}</a>.
+          and to complain to your data protection authority. California residents have the right to know, delete and correct personal information, to
+          non-discrimination, and to opt out of the “sharing” of personal information for cross-context behavioural advertising, which the AdSense cookies in the
+          editor may count as; you can opt out at adssettings.google.com or by removing ads. [CONFIRM CCPA/CPRA WORDING AND ANY “DO NOT SELL OR SHARE” LINK WITH
+          YOUR LAWYER.] To exercise your rights, email <a href={`mailto:${S.privacyEmail}`}>{S.privacyEmail}</a>.
           You can delete individual projects yourself on the <Link href="/projects">projects page</Link>, and your whole account (with every project) on
           the <Link href="/account">account page</Link>.
         </p>

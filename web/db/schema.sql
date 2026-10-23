@@ -19,3 +19,13 @@ create index if not exists "verification_identifier_idx" on "verification" ("ide
 create table if not exists "project" ("id" text not null primary key, "user_id" text not null references "user" ("id") on delete cascade, "name" text not null, "data" text not null, "duration" double precision default 0 not null, "clip_count" integer default 0 not null, "created_at" timestamptz default CURRENT_TIMESTAMP not null, "updated_at" timestamptz default CURRENT_TIMESTAMP not null);
 
 create index if not exists "project_user_idx" on "project" ("user_id", "updated_at");
+
+-- Ad-free supporters (lib/supporter.ts). Each account gets a code to put in its Ko-fi message.
+create table if not exists "supporter_code" ("user_id" text not null primary key references "user" ("id") on delete cascade, "code" text not null unique, "created_at" timestamptz default CURRENT_TIMESTAMP not null);
+
+-- Ko-fi payments reported by its webhook; user_id is the account they were matched to (by code, else by email).
+create table if not exists "kofi_payment" ("transaction_id" text not null primary key, "email" text not null, "amount" numeric not null, "currency" text not null, "type" text not null, "user_id" text references "user" ("id") on delete set null, "paid_at" timestamptz not null, "received_at" timestamptz default CURRENT_TIMESTAMP not null);
+
+create index if not exists "kofi_payment_user_idx" on "kofi_payment" ("user_id");
+
+create index if not exists "kofi_payment_email_idx" on "kofi_payment" ("email");

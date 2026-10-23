@@ -18,6 +18,7 @@ import { Dialogs } from './components/Dialogs';
 import { ContextMenuHost } from './components/ContextMenu';
 import { isSite, isBrowserEngine } from './webBridge';
 import { HelperChip } from './components/HelperConnect';
+import { AdBar } from './components/AdBar';
 
 function usePersisted(key: string, initial: number): [number, (v: number) => void] {
   const [v, setV] = useState<number>(() => {
@@ -251,6 +252,7 @@ export function App() {
           </>
         )}
       </div>
+      <AdBar />
       <StatusBar />
       <Dialogs />
       <ContextMenuHost />

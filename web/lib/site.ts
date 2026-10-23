@@ -13,6 +13,8 @@ export const SITE = {
   governingLaw: '[COUNTRY / STATE OF GOVERNING LAW]',
   minimumAge: 13,
   legalUpdated: '[DATE THESE TERMS TAKE EFFECT]',
+  /** Google AdSense publisher ID (ADSENSE_CLIENT overrides it; forks should use their own). */
+  adsenseClient: 'ca-pub-5183770861913918',
   /** Where the helper's default allowed origin points; must match the deployed domain. */
   helperPort: 5310,
 };

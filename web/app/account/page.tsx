@@ -3,13 +3,14 @@ import Link from 'next/link';
 import { SiteHeader, SiteFooter } from '@/components/SiteChrome';
 import { requireUser } from '@/lib/session';
 import { listProjects } from '@/lib/projects';
+import { supporterStatus } from '@/lib/supporter';
 import { DeleteAccount } from './DeleteAccount';
 
 export const metadata: Metadata = { title: 'Account', robots: { index: false } };
 
 export default async function AccountPage() {
   const user = await requireUser('/account');
-  const projects = await listProjects(user.id);
+  const [projects, supporter] = await Promise.all([listProjects(user.id), supporterStatus(user)]);
   return (
     <>
       <SiteHeader />
@@ -33,6 +34,27 @@ export default async function AccountPage() {
             </tr>
           </tbody>
         </table>
+        <h2 id="ad-free">Ad-free editor</h2>
+        {supporter.adFree ? (
+          <div className="supporter on">
+            <p>
+              <b>Thank you for supporting IngrainedCut!</b> The editor shows no ads on this account.
+            </p>
+          </div>
+        ) : (
+          <div className="supporter">
+            <p>
+              The editor shows a small ad. Support IngrainedCut with <b>${supporter.price}</b> or more on Ko-fi and the ads are gone for good on this account.
+            </p>
+            <p>
+              Pay with this account&apos;s email (<b>{user.email}</b>), or paste your code <span className="code">{supporter.code}</span> into the Ko-fi message so we
+              can find you. It usually takes less than a minute — refresh this page, or the editor, afterwards.
+            </p>
+            <a className="kofi-link" href={supporter.kofiUrl} target="_blank" rel="noopener noreferrer">
+              <img src="/kofi-cup.png" alt="" width={24} height={19} /> Support on Ko-fi
+            </a>
+          </div>
+        )}
         <h2>Your data</h2>
         <p>
           We store your name, email, profile picture and your projects&apos; timelines. Your media files stay on your computer. See the{' '}

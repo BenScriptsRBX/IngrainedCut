@@ -11,9 +11,6 @@ export default function Terms() {
     <>
       <SiteHeader />
       <main className="prose">
-        <div className="draft-banner">
-          Draft for review: replace every [PLACEHOLDER] and have a qualified lawyer review these terms for your business and jurisdictions before launch.
-        </div>
         <h1>Terms of Service</h1>
         <p className="updated">Effective {S.legalUpdated}</p>
 
@@ -78,11 +75,11 @@ export default function Terms() {
         </p>
         <p>
           <b>Ads and the ad-free editor.</b> The free editor on the website shows ads, provided by Google AdSense. You can remove them by supporting {SITE.name} on
-          Ko-fi with a total of at least $2 [OR THE EQUIVALENT IN YOUR KO-FI CURRENCY]: ads are then turned off in the editor for the account we match the payment
+          Ko-fi with a total of at least US$2: ads are then turned off in the editor for the account we match the payment
           to (by the code on your account page in your Ko-fi message, or by your email address). Support is voluntary and is not a purchase of software, a licence
           or any other feature; the ad-free editor lasts for as long as we run the Service with ads. Payments are processed by Ko-fi under its own terms and, except
           where the law requires otherwise, are non-refundable. If a payment can’t be matched to your account, contact us at{' '}
-          <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>. [HAVE YOUR LAWYER CHECK REFUND AND CONSUMER-LAW WORDING.]
+          <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>.
         </p>
 
         <h2>8. Termination</h2>
@@ -101,7 +98,7 @@ export default function Terms() {
         <p>
           TO THE MAXIMUM EXTENT PERMITTED BY LAW, WE WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL OR PUNITIVE DAMAGES, OR FOR LOSS OF DATA,
           CONTENT, PROFITS OR REVENUE, ARISING FROM YOUR USE OF THE SERVICE. OUR TOTAL LIABILITY FOR ANY CLAIM IS LIMITED TO THE GREATER OF THE AMOUNT YOU PAID US IN THE
-          12 MONTHS BEFORE THE CLAIM OR [AMOUNT]. Nothing in these Terms limits liability that cannot be limited by law, including your statutory rights as a consumer.
+          12 MONTHS BEFORE THE CLAIM OR US$50. Nothing in these Terms limits liability that cannot be limited by law, including your statutory rights as a consumer.
         </p>
 
         <h2>11. Indemnity</h2>
@@ -111,8 +108,8 @@ export default function Terms() {
 
         <h2>12. Governing law and disputes</h2>
         <p>
-          These Terms are governed by the laws of {S.governingLaw}, without regard to conflict-of-law rules. [DISPUTE RESOLUTION / VENUE CLAUSE — have your lawyer
-          specify courts or arbitration.] If you are a consumer, you may also benefit from mandatory protections of the country where you live.
+          These Terms are governed by the laws of {S.governingLaw}, without regard to conflict-of-law rules. Any dispute will be brought in the state or
+          federal courts located in Arizona, and you and we agree to their jurisdiction. If you are a consumer, you may also benefit from mandatory protections of the country where you live.
         </p>
 
         <h2>13. Changes to these Terms</h2>
@@ -123,7 +120,7 @@ export default function Terms() {
 
         <h2>14. Contact</h2>
         <p>
-          {S.company}, {S.address} · <a href={`mailto:${S.contactEmail}`}>{S.contactEmail}</a>
+          {S.company} · <a href={`mailto:${S.contactEmail}`}>{S.contactEmail}</a>
         </p>
       </main>
       <SiteFooter />

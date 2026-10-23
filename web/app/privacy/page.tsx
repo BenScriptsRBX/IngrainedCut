@@ -11,10 +11,6 @@ export default function Privacy() {
     <>
       <SiteHeader />
       <main className="prose">
-        <div className="draft-banner">
-          Draft for review: replace every [PLACEHOLDER], list your actual processors and regions, and have a qualified lawyer review this policy (for example for
-          GDPR/UK GDPR and CCPA/CPRA) before launch.
-        </div>
         <h1>Privacy Policy</h1>
         <p className="updated">Effective {S.legalUpdated}</p>
 
@@ -30,7 +26,7 @@ export default function Privacy() {
 
         <h2>1. Who we are</h2>
         <p>
-          {S.company} (“we”, “us”), {S.address}, is the controller of the personal data described here for {S.name} (the “Service”). Contact:{' '}
+          {S.company} (“we”, “us”) is the controller of the personal data described here for {S.name} (the “Service”). Contact:{' '}
           <a href={`mailto:${S.privacyEmail}`}>{S.privacyEmail}</a>.
         </p>
 
@@ -73,7 +69,7 @@ export default function Privacy() {
               <td>Advertising data: cookies and similar identifiers, IP address, device and browser information, and the ads shown and clicked</td>
               <td>Google AdSense, in the editor</td>
               <td>Show ads that fund the Service, measure them and prevent ad fraud</td>
-              <td>Consent where required (EEA/UK/Switzerland); legitimate interests elsewhere [CONFIRM]</td>
+              <td>Consent where required (EEA/UK/Switzerland); legitimate interests elsewhere</td>
             </tr>
             <tr>
               <td>Messages you send us</td>
@@ -116,8 +112,8 @@ export default function Privacy() {
         <h2>5. Who we share data with</h2>
         <p>We do not sell your personal information for money. We use service providers that process data on our behalf:</p>
         <ul>
-          <li>Vercel Inc. — website hosting [REGION]</li>
-          <li>[DATABASE PROVIDER, e.g. Neon] — database hosting [REGION]</li>
+          <li>Vercel Inc. — website hosting (United States)</li>
+          <li>Neon — database hosting (United States)</li>
           <li>Google — sign-in</li>
           <li>Google — advertising in the editor (AdSense), which collects the advertising data above directly through its cookies</li>
           <li>Ko-fi Labs Limited — supporter payments (Ko-fi handles the payment; we receive the details listed above, never your card or PayPal details)</li>
@@ -126,15 +122,15 @@ export default function Privacy() {
 
         <h2>6. International transfers</h2>
         <p>
-          Our providers may process data outside your country. Where required, transfers rely on appropriate safeguards such as the European Commission’s Standard
-          Contractual Clauses. [CONFIRM WITH YOUR PROVIDERS.]
+          We store your data in the United States, and our providers may process it there or in other countries. Where required, transfers rely on
+          appropriate safeguards such as the European Commission’s Standard Contractual Clauses.
         </p>
 
         <h2>7. Retention</h2>
         <p>
-          We keep your account and saved projects while your account is active. Deleted projects are removed from our database immediately [AND FROM BACKUPS WITHIN
-          N DAYS]. Session records expire after 30 days. When you delete your account we delete your account data and projects [WITHIN N DAYS].
-          Ko-fi payment records are kept as financial records for [N YEARS — CHECK YOUR TAX RULES]; deleting your account unlinks them from it.
+          We keep your account and saved projects while your account is active. Deleted projects are removed from our database immediately and drop out of our
+          database backups within 7 days. Session records expire after 30 days. When you delete your account we delete your account data and projects immediately (and from backups within 7 days).
+          Ko-fi payment records are kept as financial records for 7 years; deleting your account unlinks them from it.
         </p>
 
         <h2>8. Your rights</h2>
@@ -142,8 +138,7 @@ export default function Privacy() {
           Depending on where you live, you may have the right to access, correct, delete or export your personal data, to object to or restrict certain processing,
           and to complain to your data protection authority. California residents have the right to know, delete and correct personal information, to
           non-discrimination, and to opt out of the “sharing” of personal information for cross-context behavioural advertising, which the AdSense cookies in the
-          editor may count as; you can opt out at adssettings.google.com or by removing ads. [CONFIRM CCPA/CPRA WORDING AND ANY “DO NOT SELL OR SHARE” LINK WITH
-          YOUR LAWYER.] To exercise your rights, email <a href={`mailto:${S.privacyEmail}`}>{S.privacyEmail}</a>.
+          editor may count as; you can opt out at adssettings.google.com or by removing ads. To exercise your rights, email <a href={`mailto:${S.privacyEmail}`}>{S.privacyEmail}</a>.
           You can delete individual projects yourself on the <Link href="/projects">projects page</Link>, and your whole account (with every project) on
           the <Link href="/account">account page</Link>.
         </p>
@@ -162,7 +157,7 @@ export default function Privacy() {
 
         <h2>12. Contact</h2>
         <p>
-          {S.company}, {S.address} · <a href={`mailto:${S.privacyEmail}`}>{S.privacyEmail}</a>
+          {S.company} · <a href={`mailto:${S.privacyEmail}`}>{S.privacyEmail}</a>
         </p>
       </main>
       <SiteFooter />

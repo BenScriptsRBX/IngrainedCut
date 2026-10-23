@@ -547,4 +547,4 @@ a.logo { text-decoration: none; }
 .helper-chip.found { border-color: rgba(59, 178, 107, 0.6); color: #bbf7d0; }
 .helper-chip.found .hc-dot { background: #3bb26b; animation: pulse 1s infinite; }
 /* AI panel / Help: pick Claude Code, Codex or Cursor (HelperConnect.tsx AppPicker) */
-.app-picker { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.app-select { background: #1e1e1e; color: inherit; border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; font: inherit; }

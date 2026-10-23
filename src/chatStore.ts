@@ -295,6 +295,11 @@ export function installChatBridge() {
       case 'busy':
         setC((st) => ({ busy: true, busySince: st.busySince ?? Date.now() }));
         break;
+      case 'provider':
+        // no API key for the built-in agent: the message went to the user's own app instead
+        setC({ provider: ev.provider, model: '', effort: 'medium' });
+        push({ kind: 'note', id: nid(), text: 'This goes to your own Claude Code: in Claude Code, say “connect to IngrainedCut” and it answers here. (No API key is set for the built-in chat.)' });
+        break;
       case 'status':
         if (s.busy && ev.status) setC({ statusNote: String(ev.status).slice(0, 120) });
         break;

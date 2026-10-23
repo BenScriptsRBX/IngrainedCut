@@ -367,6 +367,10 @@ export function createCore(host) {
     relay: new RelayAgent({ emit, onLink: (st) => emit('relay:status', st) }),
   };
   const provider = () => (agents[getSettings().provider] ? getSettings().provider : 'claude');
+  // The built-in Claude / Codex chat runs on an API key. Without one, the panel talks to the user's own app instead
+  // (relayAgent.mjs), so typing a message never ends in "add an API key".
+  const needsKey = (p, s = getSettings()) => (p === 'claude' && !s.apiKey) || (p === 'codex' && !s.openaiApiKey);
+  if (needsKey(provider())) saveSettings({ provider: 'relay' });
   const active = () => agents[provider()];
   /** settings keys holding each provider's model and effort */
   const MODEL_KEYS = { claude: ['model', 'effort'], codex: ['codexModel', 'codexEffort'], cursor: ['cursorModel', null], relay: [null, null] };
@@ -383,7 +387,13 @@ export function createCore(host) {
     }
   });
 
-  handle('agent:send', (payload) => active().send(payload));
+  handle('agent:send', (payload) => {
+    if (needsKey(provider())) {
+      saveSettings({ provider: 'relay' });
+      emit('agent:event', { type: 'provider', provider: 'relay' });
+    }
+    return active().send(payload);
+  });
   handle('agent:interrupt', () => active().interrupt());
   handle('agent:reset', () => active().reset());
   handle('agent:set-model', async ({ model, effort }) => {

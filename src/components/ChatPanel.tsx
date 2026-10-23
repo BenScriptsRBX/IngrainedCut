@@ -653,11 +653,12 @@ function RelaySetup() {
   const [app, setApp] = useMcpApp();
   return (
     <>
-      <div className="hint">Your own Claude Code, Codex or Cursor answers here, on your own plan. Pick it and run this once in a terminal:</div>
-      <AppPicker app={app} onChange={setApp} />
-      <CopyLine text={connectCommand(app)} />
+      <div>
+        In {MCP_APPS[app]}, say <b>connect to IngrainedCut</b>. Then type here.
+      </div>
       <div className="hint">
-        Then open {MCP_APPS[app]} and tell it: <b>connect to IngrainedCut</b>. Keep that session open — you type here, and it answers here.
+        First time? Run this once: <CopyLine text={connectCommand(app)} />
+        Using <AppPicker app={app} onChange={setApp} />
       </div>
     </>
   );
@@ -674,7 +675,7 @@ function AuthCallout() {
   if (provider === 'relay')
     return (
       <div className="auth-callout">
-        <b>Connect your own app</b>
+        <b>Almost there</b>
         <RelaySetup />
       </div>
     );

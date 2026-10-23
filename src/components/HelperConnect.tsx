@@ -35,22 +35,17 @@ export function useMcpApp(initial: McpApp = 'claude') {
   return [app, pick] as const;
 }
 
+/** A small inline choice: Claude Code (the default), Codex or Cursor. */
 export function AppPicker({ app, onChange }: { app: McpApp; onChange: (a: McpApp) => void }) {
   return (
-    <div className="app-picker">
+    <select className="app-select" value={app} onChange={(e) => onChange(e.target.value as McpApp)}>
       {(Object.keys(MCP_APPS) as McpApp[]).map((a) => (
-        <button key={a} className={'btn sm' + (a === app ? ' primary' : '')} onClick={() => onChange(a)}>
+        <option key={a} value={a}>
           {MCP_APPS[a]}
-        </button>
+        </option>
       ))}
-    </div>
+    </select>
   );
-}
-
-/** This site's settings page in the browser (pages can't link to it, so it is copied). */
-function siteSettingsUrl() {
-  const scheme = /Edg\//.test(navigator.userAgent) ? 'edge' : /OPR\//.test(navigator.userAgent) ? 'opera' : 'chrome';
-  return `${scheme}://settings/content/siteDetails?site=${encodeURIComponent(location.origin)}`;
 }
 
 export function CopyLine({ text }: { text: string }) {
@@ -86,7 +81,7 @@ function OpenThroughHelper() {
   const project = new URLSearchParams(location.search).get('project') ?? '';
   return (
     <a className="btn primary sm" href={`/editor/local?project=${encodeURIComponent(project)}${HELPER_PORT !== 5310 ? `&port=${HELPER_PORT}` : ''}`} style={{ display: 'inline-block', margin: '6px 0' }}>
-      Open the editor through the helper
+      Connect
     </a>
   );
 }
@@ -95,6 +90,8 @@ function ConnectButton() {
   const [state, setState] = useState<'idle' | 'checking' | 'missing' | 'blocked'>('idle');
   // already blocked (the browser won't even ask): say so up front
   useEffect(() => void localNetworkPermission().then((p) => p === 'denied' && setState('blocked')), []);
+  // the browser won't let this page reach the helper: open the editor from the helper instead (one click, no settings)
+  if (state === 'blocked') return <OpenThroughHelper />;
   return (
     <>
       <button
@@ -107,21 +104,10 @@ function ConnectButton() {
       >
         {state === 'checking' ? 'Looking for the helper…' : 'Connect'}
       </button>
-      {state === 'blocked' && (
-        <div className="hint">
-          <span className="warn-text">Your browser is blocking this site from reaching the helper on your computer.</span> That's fine: with the command above
-          running, open the editor through the helper instead — no browser settings needed.
-          <div>
-            <OpenThroughHelper />
-          </div>
-          Or allow it: paste this into the address bar and set <b>Local network access</b> to <b>Allow</b>.
-          <CopyLine text={siteSettingsUrl()} />
-        </div>
-      )}
       {state === 'missing' && (
         <div className="hint">
-          <span className="warn-text">Couldn't reach the helper.</span> Make sure the command above is still running. If your browser asked about devices on
-          your local network and you didn't allow it, open the editor through the helper instead:
+          <span className="warn-text">Couldn't reach the helper — is the command still running?</span> If your browser asked about your local network and you
+          didn't allow it, use this instead:
           <div>
             <OpenThroughHelper />
           </div>
@@ -152,27 +138,20 @@ export function HelperNeeded() {
         <Icon name="sparkle" size={28} />
       </div>
       <h3>Edit with AI</h3>
-      <p>Use the Claude, ChatGPT or Cursor plan you already have: pick your app, run one command, and it edits this timeline.</p>
       <ol className="helper-steps">
         <li>
-          Pick your app:
-          <AppPicker app={app} onChange={setApp} />
-        </li>
-        <li>
-          Open a terminal and run this (needs Node.js 22+). It connects {MCP_APPS[app]} and starts the IngrainedCut helper — keep that window open:
+          Run this in a terminal, and leave it open:
           <CopyLine text={connectCommand(app)} />
         </li>
         <li>
-          Click Connect. Your browser may ask to allow access to your local network — choose Allow.
-          <div style={{ marginTop: 6 }}>
-            <ConnectButton />
-          </div>
+          <ConnectButton />
         </li>
-        <li>Open a new {MCP_APPS[app]} session and ask it to edit your IngrainedCut timeline.</li>
+        <li>
+          In {MCP_APPS[app]}, say <b>connect to IngrainedCut</b>. Then type here.
+        </li>
       </ol>
       <p className="hint">
-        Prefer to chat right here? Once the helper is connected, add your own Anthropic or OpenAI API key in Settings. The helper also adds transcription,
-        silence and scene detection, and ProRes / GIF / MP3 export; your media never leaves your computer.
+        Using <AppPicker app={app} onChange={setApp} /> · needs Node.js 22+
       </p>
     </div>
   );

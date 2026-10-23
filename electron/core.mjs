@@ -30,6 +30,7 @@ export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..'
  * @property {{reveal(p:string):void, openExternal(url:string):void}} shell
  * @property {(()=>Promise<string|null>)=} screenshot  base64 JPEG of the editor, or undefined to ask the UI
  * @property {{devtools():void, reload():void}=} window
+ * @property {string=} mcpServerPath  where outside agents start the MCP server (default: mcp/server.mjs next to this engine)
  */
 
 /** @param {Host} host */
@@ -415,7 +416,7 @@ export function createCore(host) {
     }
     return {
       version: host.version,
-      mcpServerPath: path.join(ROOT, 'mcp', 'server.mjs'),
+      mcpServerPath: host.mcpServerPath ?? path.join(ROOT, 'mcp', 'server.mjs'),
       bridgeFile: BRIDGE_FILE,
       ffmpegOk,
       userData: userDataDir(),
@@ -563,9 +564,9 @@ export function createCore(host) {
     try {
       st = JSON.parse(r.out.slice(r.out.indexOf('{')));
     } catch {}
-    return { ...st, installed: true, source: cc.source, path: cc.path, method: st.authMethod, apiKey: !!s.apiKey, ready: !!s.apiKey || !!st.loggedIn };
+    return { ...st, installed: true, source: cc.source, path: cc.path, method: st.authMethod, apiKey: !!s.apiKey, ready: !!s.apiKey };
   }
-  const SIGN_IN_THERE = 'Sign in inside Claude Code itself: in the Claude desktop app, or run `claude` in a terminal and type /login. IngrainedCut then uses that sign-in.';
+  const SIGN_IN_THERE = 'The chat here runs on an Anthropic API key (Settings). To use your Claude subscription, connect your own Claude Code: Help → Use your own Claude Code, Codex or Cursor (MCP).';
   handle('auth:status', claudeStatus);
   handle('auth:login', () => ({ ok: false, out: SIGN_IN_THERE }));
   handle('auth:cancel', () => {});

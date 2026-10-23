@@ -9,6 +9,9 @@ export { EDITOR_GUIDE };
 
 const SERVER = 'ingrainedcut';
 
+const NEEDS_KEY =
+  'The chat here runs on an Anthropic API key: add one in Settings (console.anthropic.com → API keys). To use your Claude subscription instead, open Claude Code yourself and connect it to IngrainedCut: Help → Use your own Claude Code, Codex or Cursor (MCP).';
+
 const SYSTEM_APPEND = `${EDITOR_GUIDE}
 # Parallel agents
 You can run subagents in parallel with the Agent tool (send several Agent calls in one message to run them at once). The user sees each one running in the panel. Specialists available:
@@ -147,8 +150,14 @@ export class AgentManager {
       return false;
     }
     const s = this.o.getSettings();
-    const env = { ...process.env };
-    if (s.apiKey) env.ANTHROPIC_API_KEY = s.apiKey;
+    // Anthropic only allows apps built on the Agent SDK to run on an API key, not on someone's Claude subscription
+    // (code.claude.com/docs/en/agent-sdk/overview). Subscribers drive IngrainedCut from their own Claude Code over MCP.
+    if (!s.apiKey) {
+      this.o.emit('agent:event', { type: 'error', message: NEEDS_KEY });
+      return false;
+    }
+    const env = { ...process.env, ANTHROPIC_API_KEY: s.apiKey };
+    delete env.CLAUDE_CODE_OAUTH_TOKEN;
     this.input = new InputQueue();
     const resume = this.resume;
     this.resume = null;

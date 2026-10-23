@@ -87,7 +87,7 @@ export function HelperNeeded() {
       </div>
       <h3>Edit with AI</h3>
       <p>
-        Claude, Codex and Cursor run on your own computer, with your own account, through the free IngrainedCut helper. Everything else — editing,
+        Claude, Codex and Cursor run on your own computer, with your own API key or account, through the free IngrainedCut helper. Everything else — editing,
         import and export — already works right here in your browser.
       </p>
       <Steps />

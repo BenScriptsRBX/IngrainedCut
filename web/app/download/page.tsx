@@ -4,7 +4,7 @@ import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
 import { HelperStatus } from './HelperStatus';
 import { HELPER_COMMAND } from '@/lib/helper';
 
-export const metadata: Metadata = { title: 'Set up the helper', description: 'Run the free IngrainedCut helper on your computer to edit with AI — Claude, Codex or Cursor — using your own account.' };
+export const metadata: Metadata = { title: 'Set up the helper', description: 'Run the free IngrainedCut helper on your computer to edit with AI — Claude, Codex or Cursor — using your own API key or account.' };
 
 export default function DownloadPage() {
   return (
@@ -47,7 +47,7 @@ export default function DownloadPage() {
             <tr>
               <th>Agent</th>
               <th>Install</th>
-              <th>Sign in</th>
+              <th>Set up</th>
             </tr>
           </thead>
           <tbody>
@@ -56,12 +56,18 @@ export default function DownloadPage() {
               <td>
                 Your own Claude Code — the Claude desktop app, or <a href="https://docs.claude.com/en/docs/claude-code/setup">Claude Code</a> on its own
               </td>
-              <td>Sign in inside Claude Code (in the Claude app, or <code className="inline">claude</code> then <code className="inline">/login</code>). The helper finds it automatically.</td>
+              <td>
+                Built-in chat: add an Anthropic API key in the editor&apos;s Settings. Have a Claude plan? In the editor, open Help → Use your own Claude Code, Codex
+                or Cursor, run the command it shows once, then use Claude Code as usual.
+              </td>
             </tr>
             <tr>
               <td>Codex</td>
               <td>Included with the helper</td>
-              <td>In the editor: agent menu → Codex → Sign in with ChatGPT, or add an OpenAI API key in Settings</td>
+              <td>
+                Built-in chat: add an OpenAI API key in Settings. Have a ChatGPT plan? Install Codex yourself and connect it the same way (Help → Use your own
+                Claude Code, Codex or Cursor).
+              </td>
             </tr>
             <tr>
               <td>Cursor</td>
@@ -72,7 +78,7 @@ export default function DownloadPage() {
             </tr>
           </tbody>
         </table>
-        <p>Choose the agent from the model button at the top of the AI panel in the editor. Cursor keeps its tool settings in a <code className="inline">.cursor/mcp.json</code> inside your project folder. AI usage is billed by, or counted against your plan with, that provider.</p>
+        <p>Choose the agent from the model button at the top of the AI panel in the editor. Cursor keeps its tool settings in a <code className="inline">.cursor/mcp.json</code> inside your project folder. AI usage is billed by that provider: API prices for the built-in Claude and Codex chat, or your own plan when you connect your own app.</p>
 
         <h2>Troubleshooting</h2>
         <ul>

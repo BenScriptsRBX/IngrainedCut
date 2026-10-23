@@ -193,6 +193,24 @@ wss.on('connection', (ws) => {
   });
 });
 
+/**
+ * Outside agents (Claude Code, Codex, Cursor) start the MCP server from a fixed place, so the `mcp add` command they were
+ * given keeps working when the helper updates (npx keeps each version in its own cache folder): the bundled server is
+ * copied to ~/.ingrainedcut/mcp-server on every start. A checkout of the repo uses mcp/server.mjs where it is.
+ */
+function installMcpServer() {
+  if (!fs.existsSync(path.join(ROOT, 'lib'))) return undefined;
+  const dest = path.join(os.homedir(), '.ingrainedcut', 'mcp-server');
+  try {
+    fs.rmSync(dest, { recursive: true, force: true });
+    for (const d of ['mcp', 'lib']) fs.cpSync(path.join(ROOT, d), path.join(dest, d), { recursive: true });
+    return path.join(dest, 'mcp', 'server.mjs');
+  } catch (e) {
+    console.error('  Could not install the MCP server for outside agents:', e.message);
+    return undefined;
+  }
+}
+
 const startupProject = argv.find((a) => /\.icut$/i.test(a) && fs.existsSync(a)) ?? null;
 
 const core = createCore({
@@ -202,6 +220,7 @@ const core = createCore({
   hasEditor: () => !!editor && editor.readyState === 1,
   version: pkg.version,
   startupProject,
+  mcpServerPath: installMcpServer(),
   dialogs: {
     openMedia: () =>
       openFiles({

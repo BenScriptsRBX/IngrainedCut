@@ -260,12 +260,15 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
     <Modal title="Settings" onClose={onClose} width={600} footer={<button className="btn primary" onClick={onClose}>Done</button>}>
       <h4 className="form-h">Claude</h4>
       <div className="form">
-        <label>Account</label>
+        <label>Status</label>
         <AuthBox />
         <label>Anthropic API key</label>
         <div>
-          <input type="password" placeholder="sk-ant-… (optional)" defaultValue={st.apiKey} onBlur={(e) => save({ apiKey: e.target.value.trim() })} style={{ width: '100%' }} />
-          <div className="hint">Optional. Leave empty to use your Claude Code's own sign-in; if set, your Claude Code uses this key instead. Stored only on this computer.</div>
+          <input type="password" placeholder="sk-ant-…" defaultValue={st.apiKey} onBlur={(e) => save({ apiKey: e.target.value.trim() })} style={{ width: '100%' }} />
+          <div className="hint">
+            Needed for the Claude chat here (billed by Anthropic at API prices; create one at console.anthropic.com). Stored only on this computer. To use a
+            Claude subscription instead, <a onClick={() => setS({ dialog: 'mcp' })}>connect your own Claude Code</a>.
+          </div>
         </div>
         <label>Default model</label>
         <div>
@@ -312,12 +315,15 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
       </div>
       <h4 className="form-h">Codex</h4>
       <div className="form">
-        <label>Account</label>
+        <label>Status</label>
         <ProviderAuth provider="codex" />
         <label>OpenAI API key</label>
         <div>
-          <input type="password" placeholder="sk-… (optional)" defaultValue={st.openaiApiKey} onBlur={(e) => save({ openaiApiKey: e.target.value.trim() })} style={{ width: '100%' }} />
-          <div className="hint">Optional. Leave empty to use your ChatGPT sign-in. Stored only on this computer.</div>
+          <input type="password" placeholder="sk-…" defaultValue={st.openaiApiKey} onBlur={(e) => save({ openaiApiKey: e.target.value.trim() })} style={{ width: '100%' }} />
+          <div className="hint">
+            Needed for the Codex chat here (billed by OpenAI at API prices; create one at platform.openai.com). Stored only on this computer. To use a
+            ChatGPT plan instead, <a onClick={() => setS({ dialog: 'mcp' })}>connect your own Codex</a>.
+          </div>
         </div>
       </div>
       <h4 className="form-h">Cursor</h4>
@@ -383,8 +389,8 @@ const CLAUDE_SOURCE: Record<string, string> = {
 };
 
 /**
- * Claude runs on the user's own Claude Code (their sign-in or API key, skills and settings). IngrainedCut doesn't sign
- * anyone in to Claude: this shows which Claude Code it found and how to sign in there.
+ * The built-in Claude chat runs the user's own Claude Code on their Anthropic API key (Anthropic doesn't allow apps built
+ * on the Agent SDK to use a Claude subscription). This shows whether both are there, and points subscribers to MCP.
  */
 export function AuthBox({ compact }: { compact?: boolean }) {
   const [st, setSt] = useState<Awaited<ReturnType<typeof window.icut.authStatus>> | null>(null);
@@ -395,39 +401,32 @@ export function AuthBox({ compact }: { compact?: boolean }) {
     setChecking(false);
   };
   useEffect(() => void refresh(), []);
-  if (!st) return <div className="dim">Looking for your Claude Code…</div>;
+  if (!st) return <div className="dim">Looking for Claude Code…</div>;
   const again = (
     <a onClick={refresh} style={{ marginLeft: 6 }}>
       {checking ? 'Checking…' : 'Check again'}
     </a>
   );
-  // (older helpers don't report `installed`)
-  if (st.installed === false)
-    return (
-      <div className="auth-box">
-        <div className="warn-text">Claude Code isn't installed on this computer.</div>
-        <div className="hint">
-          IngrainedCut uses your own Claude Code. Install the Claude desktop app, or Claude Code from a terminal with <code className="mono">{st.install}</code>,
-          sign in there, then {again}.
-        </div>
-      </div>
-    );
+  const mcp = <a onClick={() => setS({ dialog: 'mcp' })}>connect your own Claude Code</a>;
   return (
     <div className="auth-box">
-      {st.loggedIn ? (
-        <div>
-          ✓ Using your Claude Code {CLAUDE_SOURCE[st.source ?? ''] ?? ''}
-          {st.email ? ` — signed in as ${st.email}` : ''} {st.authMethod ? <span className="dim">({st.authMethod})</span> : null}
-        </div>
-      ) : st.apiKey ? (
-        <div>✓ Using your Claude Code {CLAUDE_SOURCE[st.source ?? ''] ?? ''} with your API key</div>
+      {st.installed === false ? (
+        <>
+          <div className="warn-text">Claude Code isn't installed on this computer.</div>
+          <div className="hint">
+            The chat runs Claude Code, so install it from a terminal with <code className="mono">{st.install}</code> (or install the Claude desktop app), then{' '}
+            {again}.
+          </div>
+        </>
       ) : (
-        <div className="warn-text">Found your Claude Code, but it isn't signed in.</div>
+        <div>✓ Claude Code found {CLAUDE_SOURCE[st.source ?? ''] ?? ''}</div>
       )}
-      {!st.loggedIn && !st.apiKey && (
+      {st.apiKey ? (
+        <div>✓ The chat uses your Anthropic API key</div>
+      ) : (
         <div className="hint">
-          Sign in inside Claude Code: in the Claude desktop app, or run <code className="mono">claude</code> in a terminal and type <code className="mono">/login</code>.
-          Then {again}.
+          <span className="warn-text">Add an Anthropic API key{compact ? ' in Settings' : ' below'} to chat here.</span> Have a Claude subscription? {mcp} instead —
+          it then edits this timeline on your plan.
         </div>
       )}
       {!compact && st.path && <div className="hint mono" style={{ wordBreak: 'break-all' }}>{st.path}</div>}
@@ -435,9 +434,10 @@ export function AuthBox({ compact }: { compact?: boolean }) {
   );
 }
 
+// keyOnly: the built-in chat runs on an API key; plan users connect the provider's own app over MCP instead
 const PROVIDER_COPY = {
-  codex: { name: 'Codex', signIn: 'Sign in with ChatGPT', key: 'an OpenAI API key' },
-  cursor: { name: 'Cursor', signIn: 'Sign in to Cursor', key: 'a Cursor API key' },
+  codex: { name: 'Codex', signIn: 'Sign in with ChatGPT', key: 'an OpenAI API key', keyOnly: true, plan: 'ChatGPT plan' },
+  cursor: { name: 'Cursor', signIn: 'Sign in to Cursor', key: 'a Cursor API key', keyOnly: false, plan: 'Cursor plan' },
 } as const;
 
 /** Sign-in state for Codex / Cursor: runs the CLI's own login (browser) on this computer. */
@@ -492,6 +492,20 @@ export function ProviderAuth({ provider, compact }: { provider: 'codex' | 'curso
           <div className="hint">
             Install it from a terminal: <code className="mono">{st.install}</code>, then{' '}
             <a onClick={refresh}>check again</a>.
+          </div>
+        )}
+      </div>
+    );
+  if (copy.keyOnly)
+    return (
+      <div className="auth-box">
+        <div>✓ {copy.name} is installed</div>
+        {st.apiKey ? (
+          <div>✓ The chat uses your API key</div>
+        ) : (
+          <div className="hint">
+            <span className="warn-text">Add {copy.key}{compact ? ' in Settings' : ' below'} to chat here.</span> Have a {copy.plan}?{' '}
+            <a onClick={() => setS({ dialog: 'mcp' })}>Connect your own {copy.name}</a> instead — it then edits this timeline on your plan.
           </div>
         )}
       </div>
@@ -645,32 +659,55 @@ function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+function CopyBox({ text, pre }: { text: string; pre?: boolean }) {
+  return (
+    <div className="codebox">
+      {pre ? <pre>{text}</pre> : <code>{text}</code>}
+      <button className="icon-btn" onClick={() => navigator.clipboard.writeText(text).then(() => toast('Copied', 'success'))}>
+        <Icon name="copy" size={13} />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The way to use a Claude, ChatGPT or Cursor subscription with IngrainedCut: the user runs that company's own app and
+ * connects it to IngrainedCut's MCP server, so the subscription is only ever used by its own app. (The chat panel's
+ * built-in Claude and Codex run on API keys; see electron/agent.mjs.)
+ */
 function McpDialog({ onClose }: { onClose: () => void }) {
   const [info, setInfo] = useState<any>(null);
   useEffect(() => void window.icut.appInfo().then(setInfo), []);
-  const cmd = info ? `claude mcp add ingrainedcut -- node "${info.mcpServerPath}"` : '';
-  const json = info ? JSON.stringify({ mcpServers: { ingrainedcut: { command: 'node', args: [info.mcpServerPath] } } }, null, 2) : '';
+  const p = info?.mcpServerPath as string | undefined;
+  const json = p ? JSON.stringify({ mcpServers: { ingrainedcut: { command: 'node', args: [p] } } }, null, 2) : '';
   return (
-    <Modal title="Connect Claude Code to IngrainedCut (MCP)" onClose={onClose} width={640}>
+    <Modal title="Use your own Claude Code, Codex or Cursor (MCP)" onClose={onClose} width={660}>
       <p>
-        The chat panel already talks to Claude Code with every IngrainedCut tool built in. You can <b>also</b> drive this editor from any Claude Code session in a
-        terminal or IDE: register the IngrainedCut MCP server once, keep the app open, and ask Claude to edit your timeline.
+        Have a Claude, ChatGPT or Cursor plan? Run their app yourself, on your own plan, and connect it to IngrainedCut once. It gets every editing tool and
+        edits the timeline open here, live{isSite ? ', while the IngrainedCut helper is running' : ''}.
       </p>
-      <div className="form-h">Terminal</div>
-      <div className="codebox">
-        <code>{cmd}</code>
-        <button className="icon-btn" onClick={() => navigator.clipboard.writeText(cmd).then(() => toast('Copied', 'success'))}>
-          <Icon name="copy" size={13} />
-        </button>
-      </div>
-      <div className="form-h">or .mcp.json</div>
-      <div className="codebox">
-        <pre>{json}</pre>
-        <button className="icon-btn" onClick={() => navigator.clipboard.writeText(json).then(() => toast('Copied', 'success'))}>
-          <Icon name="copy" size={13} />
-        </button>
-      </div>
-      <p className="hint">The server finds the running editor through {info?.bridgeFile} (a local, token-protected connection on 127.0.0.1).</p>
+      {!p ? (
+        <p className="warn-text">Connect the IngrainedCut helper first (the chip at the top right), then open this again.</p>
+      ) : (
+        <>
+          <div className="form-h">Claude Code — run once in a terminal</div>
+          <CopyBox text={`claude mcp add --scope user ingrainedcut -- node "${p}"`} />
+          <p className="hint">
+            Then start <code className="mono">claude</code> in any folder (or use Claude Code in the Claude desktop app or your IDE) and ask, for example, “cut
+            the silences in my IngrainedCut timeline”.
+          </p>
+          <div className="form-h">Codex — run once in a terminal</div>
+          <CopyBox text={`codex mcp add ingrainedcut -- node "${p}"`} />
+          <p className="hint">Then use Codex as usual (the CLI, the Codex app or the IDE extension).</p>
+          <div className="form-h">Cursor — add to ~/.cursor/mcp.json</div>
+          <CopyBox text={json} pre />
+          <p className="hint">The Cursor app and the cursor-agent CLI both read this file. Other MCP apps take the same entry.</p>
+        </>
+      )}
+      <p className="hint">
+        Your AI app keeps your own sign-in and plan; IngrainedCut never sees them. Connected apps show in the chat panel's agent list. The server reaches the
+        open editor through a local, token-protected connection{info?.bridgeFile ? ` (${info.bridgeFile})` : ''}.
+      </p>
     </Modal>
   );
 }

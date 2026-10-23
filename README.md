@@ -39,7 +39,7 @@ The easiest way to use IngrainedCut is the website: **https://www.ingrainedcut.c
 3. To edit with AI (Claude, Codex or Cursor, with your own account), run the free helper on your computer:
 
    ```bash
-   npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.7.tgz
+   npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.8.tgz
    ```
 
    The exact command for the current version is always on the [setup page](https://www.ingrainedcut.com/download).
@@ -80,14 +80,14 @@ never reveal file paths. The desktop app and the browser version share settings 
 ### Connect an AI agent
 
 Pick the agent from the model button at the top of the chat panel: **Claude**, **Codex** or **Cursor**.
-Each uses the user's own account, so usage is billed by (or counted against the plan with) that provider.
+The built-in Claude and Codex chats run on the user's own **API key** (Anthropic doesn't allow apps built on the Agent
+SDK to use a Claude subscription, and a ChatGPT plan is meant for OpenAI's own Codex apps). People who pay for a plan
+run their own Claude Code or Codex instead and connect it over MCP (below). Cursor uses the user's own Cursor account.
 
 - **Claude** — runs on the user's **own Claude Code** (`electron/claudeCode.mjs` finds it: `ICUT_CLAUDE_PATH`, `claude`
-  on PATH, the copy inside the Claude desktop app, or `~/.local/bin`), with their sign-in, skills and settings.
-  IngrainedCut has no Claude sign-in of its own: people sign in inside Claude Code (the Claude app, or `claude` →
-  `/login`), or paste an Anthropic API key in Settings. Model (Opus 5.5 by default) and effort are in the same menu.
-- **Codex** — installs on first use (`@openai/codex-sdk`, ~450 MB). **Sign in with ChatGPT** runs `codex login`, or add an
-  OpenAI API key in Settings. The model list and reasoning levels come from the Codex CLI's own catalog. By
+  on PATH, the copy inside the Claude desktop app, or `~/.local/bin`), with their skills and settings, on the
+  Anthropic API key from Settings. Model (Opus 5.5 by default) and effort are in the same menu.
+- **Codex** — installs on first use (`@openai/codex-sdk`, ~450 MB) and runs on the OpenAI API key from Settings. The model list and reasoning levels come from the Codex CLI's own catalog. By
   default Codex's shell is sandboxed to the project folder; **Bypass permissions** gives it full access.
 - **Cursor** — install the Cursor CLI (`irm 'https://cursor.com/install?win32=true' | iex` on Windows,
   `curl https://cursor.com/install -fsS | bash` elsewhere), then **Sign in to Cursor** or add a Cursor API key. IngrainedCut
@@ -168,13 +168,18 @@ Folder / Ask Claude to revise). Requires Node 22+ and FFmpeg; `npx` fetches the 
 - **Past chats** (paperclip button): pick any Claude Code conversation and either **Attach as context**
   (its messages go with your next message) or **Continue here** (resumes it with full history, on a copy).
 
-### Use it from any Claude Code session (MCP)
+### Use your own Claude Code, Codex or Cursor (MCP)
 
-Keep IngrainedCut open and register its MCP server (Help → Connect Claude Code shows the exact path):
+This is how a Claude, ChatGPT or Cursor plan works with IngrainedCut: run that app yourself and register IngrainedCut's
+MCP server once. **Help → Use your own Claude Code, Codex or Cursor** shows the exact commands. The npx helper copies
+its server to `~/.ingrainedcut/mcp-server` on every start, so the path stays the same across updates:
 
 ```bash
-claude mcp add ingrainedcut -- node "C:\path\to\IngrainedCut\mcp\server.mjs"
+claude mcp add --scope user ingrainedcut -- node "<home>/.ingrainedcut/mcp-server/mcp/server.mjs"
+codex mcp add ingrainedcut -- node "<home>/.ingrainedcut/mcp-server/mcp/server.mjs"
 ```
+
+Cursor takes the same server in `~/.cursor/mcp.json`. Keep IngrainedCut (or the helper) running while you edit.
 
 The server reaches the running editor through a token-protected local connection described in
 `~/.ingrainedcut/bridge.json`.

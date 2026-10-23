@@ -229,7 +229,7 @@ export function menubar(): { label: string; items: MenuItem[] }[] {
     {
       label: 'Help',
       items: [
-        { label: 'Connect Claude Code (MCP)…', action: () => setS({ dialog: 'mcp' }) },
+        { label: 'Use your own Claude Code, Codex or Cursor (MCP)…', action: () => setS({ dialog: 'mcp' }) },
         { label: 'Keyboard Shortcuts', action: () => setS({ dialog: 'shortcuts' }) },
         { label: 'About IngrainedCut', action: () => setS({ dialog: 'about' }) },
       ],

@@ -193,9 +193,11 @@ export class CodexAgent extends CliAgent {
 
   async turn({ text, context, images = [] }) {
     const s = this.o.getSettings();
+    // a ChatGPT plan is for OpenAI's own Codex apps; here Codex runs on an API key, and plan users connect Codex over MCP
+    if (!s.openaiApiKey) throw new Error('CODEX_NEEDS_KEY');
     const { Codex } = await loadCodexSdk();
     const codex = new Codex({
-      apiKey: s.openaiApiKey || undefined,
+      apiKey: s.openaiApiKey,
       config: {
         developer_instructions: GUIDE,
         mcp_servers: { [SERVER]: { ...mcpLaunch('codex', this.o.getBridge?.()), startup_timeout_sec: 30, tool_timeout_sec: 1800, default_tools_approval_mode: 'approve' } },
@@ -304,8 +306,10 @@ export class CodexAgent extends CliAgent {
     if (/error sending request|connection (failed|refused|reset)|routing discovery|stream disconnected|dns|ENOTFOUND|timed out/i.test(msg)) {
       return `Codex couldn't reach OpenAI — check your internet connection (or a firewall / proxy blocking chatgpt.com and api.openai.com). (${msg.slice(0, 200)})`;
     }
+    if (msg === 'CODEX_NEEDS_KEY')
+      return 'The Codex chat here runs on an OpenAI API key: add one in Settings (platform.openai.com → API keys). To use your ChatGPT plan instead, open Codex yourself and connect it to IngrainedCut: Help → Use your own Claude Code, Codex or Cursor (MCP).';
     if (/401|unauthori[sz]ed|not logged in|please (log|sign) in|invalid api key|incorrect api key/i.test(msg)) {
-      return `Codex couldn't authenticate. Sign in with ChatGPT from the agent menu (or Settings), or add an OpenAI API key in Settings. (${msg.slice(0, 300)})`;
+      return `Codex couldn't authenticate with your OpenAI API key — check it in Settings. (${msg.slice(0, 300)})`;
     }
     if (msg === 'CODEX_MISSING' || /ENOENT|Unable to locate Codex/i.test(msg)) return 'Codex isn’t installed yet. Pick Codex in the agent menu and click Install Codex.';
     return msg.slice(0, 1200);
@@ -502,7 +506,7 @@ export async function providerStatus(p, settings) {
     const r = await run(bin, ['login', 'status']);
     const loggedIn = r.code === 0 && /logged in/i.test(r.out) && !/not logged in/i.test(r.out);
     const method = r.out.match(/logged in using (?:an? )?([^\r\n]+)/i)?.[1]?.trim();
-    return { installed: true, loggedIn, method, apiKey: !!settings.openaiApiKey, ready: loggedIn || !!settings.openaiApiKey };
+    return { installed: true, loggedIn, method, apiKey: !!settings.openaiApiKey, ready: !!settings.openaiApiKey };
   }
   if (p === 'cursor') {
     const bin = await cursorBinary();

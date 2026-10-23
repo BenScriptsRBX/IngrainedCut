@@ -541,7 +541,7 @@ function AgentsIndicator() {
               </div>
             ))
           ) : (
-            <div className="ag-empty">None connected — see Help → Connect Claude Code.</div>
+            <div className="ag-empty">None connected — see Help → Use your own Claude Code, Codex or Cursor.</div>
           )}
         </div>
       )}
@@ -653,10 +653,10 @@ function AuthCallout() {
     );
   return (
     <div className="auth-callout">
-      <b>Use your Claude Code</b>
+      <b>Set up Claude</b>
       <AuthBox compact />
       <div className="hint">
-        Or add an API key in <a onClick={() => setS({ dialog: 'settings' })}>Settings</a>.
+        Add your key in <a onClick={() => setS({ dialog: 'settings' })}>Settings</a>.
       </div>
     </div>
   );

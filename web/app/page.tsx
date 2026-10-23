@@ -34,18 +34,18 @@ const FEATURES = [
 ];
 
 const AGENTS = [
-  { name: 'Claude', by: 'Anthropic', points: ['Uses your own Claude Code — your sign-in, skills and settings', 'Parallel sub-agents for big jobs', 'Continue an existing Claude Code chat inside the editor'] },
-  { name: 'Codex', by: 'OpenAI', points: ['Sign in with your ChatGPT account or use an API key', 'Same editing tools, same timeline', 'Runs in a sandbox you control'] },
+  { name: 'Claude', by: 'Anthropic', points: ['Built-in chat on your Anthropic API key', 'Have a Claude plan? Connect your own Claude Code', 'Parallel sub-agents for big jobs'] },
+  { name: 'Codex', by: 'OpenAI', points: ['Built-in chat on your OpenAI API key', 'Have a ChatGPT plan? Connect your own Codex', 'Runs in a sandbox you control'] },
   { name: 'Cursor', by: 'Anysphere', points: ['Use your Cursor subscription', 'Pick any model your plan includes', 'Same editing tools, same timeline'] },
 ];
 
 const FAQ = [
   { q: 'Does my footage get uploaded?', a: 'No. Media you import stays on your computer — in your browser’s private storage, or on your disk when the helper is running. Only the project timeline (clip positions, effects, titles — no video) is saved to your account so you can reopen it.' },
-  { q: 'Do I need to install anything?', a: 'Not to edit: import, cut, add titles and effects, and export all run in your browser. To edit with AI, run the free IngrainedCut helper on your computer with one command — Claude, Codex or Cursor then run locally with your own account. The helper also adds transcription, silence and scene detection, and ProRes / GIF / MP3 export.' },
-  { q: 'Which AI do I need?', a: 'Any one of Claude, Codex or Cursor, using your own account or API key with that provider. IngrainedCut does not resell AI access; usage is billed (or counted against your plan) by the provider under their terms.' },
+  { q: 'Do I need to install anything?', a: 'Not to edit: import, cut, add titles and effects, and export all run in your browser. To edit with AI, run the free IngrainedCut helper on your computer with one command — Claude, Codex or Cursor then run locally with your own API key or account. The helper also adds transcription, silence and scene detection, and ProRes / GIF / MP3 export.' },
+  { q: 'Which AI do I need?', a: 'Any one of Claude, Codex or Cursor. The built-in chat runs Claude or Codex on your own API key, and Cursor on your Cursor account. Already pay for Claude or ChatGPT? Connect your own Claude Code or Codex to IngrainedCut and it edits your timeline on your plan. IngrainedCut does not resell AI access; usage is billed by the provider under their terms.' },
   { q: 'Can the AI change things on my computer?', a: 'Editing actions are always allowed. Anything else — like running a shell command — asks you first unless you switch on “Bypass permissions” for that session.' },
   { q: 'Which browsers are supported?', a: 'Chrome and Edge on Windows, macOS and Linux. They have the video decoding and encoding features the editor relies on.' },
-  { q: 'How much does it cost?', a: 'IngrainedCut is free while in early access. You pay your AI provider for AI usage under your own plan.' },
+  { q: 'How much does it cost?', a: 'IngrainedCut is free. You pay your AI provider for AI usage: API prices for the built-in Claude and Codex chat, or your existing plan when you connect your own Claude Code, Codex or Cursor.' },
 ];
 
 export default function Home() {
@@ -160,7 +160,7 @@ export default function Home() {
               ))}
             </div>
             <p className="muted" style={{ fontSize: 13, marginTop: 18 }}>
-              AI usage runs on your own account with each provider and is subject to their terms and pricing. Also available as an MCP server for any Claude Code session.
+              AI usage runs on your own API key or account with each provider and is subject to their terms and pricing. Claude Code, Codex and Cursor can also connect to the editor themselves (MCP).
             </p>
           </div>
         </section>

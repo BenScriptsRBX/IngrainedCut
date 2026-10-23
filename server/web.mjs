@@ -5,7 +5,8 @@
 //   npx ingrainedcut                 start the helper (the website's editor connects to it; nothing is opened)
 //   npx ingrainedcut --open          …and open your projects page
 //   npx ingrainedcut --local         serve the editor here too, and open its private link
-//   node server/web.mjs [project.icut] [--port 5310] [--open | --no-open] [--local]
+//   npx ingrainedcut --connect claude   add IngrainedCut to Claude Code (or codex / cursor), then start the helper
+//   node server/web.mjs [project.icut] [--port 5310] [--open | --no-open] [--local] [--connect <app> [--no-helper]]
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,6 +18,7 @@ import { openMedia } from '../electron/mediaServe.mjs';
 import { documentsDir } from '../electron/paths.mjs';
 import { claudeSdk, claudeSdkInstalled } from '../electron/runtimePackages.mjs';
 import { ensureFfmpeg } from '../electron/media.mjs';
+import { connectMcpClient } from '../electron/mcpClients.mjs';
 import { openFiles, saveFile, revealInFolder, openUrl } from './dialogs.mjs';
 
 const argv = process.argv.slice(2);
@@ -211,6 +213,33 @@ function installMcpServer() {
   }
 }
 
+const mcpServerPath = installMcpServer() ?? path.join(ROOT, 'mcp', 'server.mjs');
+
+// `--connect claude|codex|cursor`: add IngrainedCut to that app (so it can edit the open timeline on the user's own plan),
+// then carry on as the helper, unless one is already running or `--no-helper` was given (the desktop app is open)
+const CONNECT_APPS = { claude: 'Claude Code', 'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor' };
+if (argv.includes('--connect')) {
+  const connectTo = String(opt('--connect', '')).toLowerCase();
+  const app = CONNECT_APPS[connectTo];
+  if (!app) {
+    console.error('\n  Use --connect claude, --connect codex or --connect cursor.\n');
+    process.exit(1);
+  }
+  const r = await connectMcpClient(connectTo === 'claude-code' ? 'claude' : connectTo, mcpServerPath);
+  if (!r.ok) {
+    console.error(`\n  Couldn't connect IngrainedCut to ${app}: ${r.out.trim().slice(-400)}\n`);
+    process.exit(1);
+  }
+  console.log(`\n  ✓ IngrainedCut is connected to ${app}.`);
+  console.log(`    Open a new ${app} session and ask it to edit your IngrainedCut timeline (keep your project open in the editor).`);
+  const running = await fetch(`http://127.0.0.1:${port}/hello`, { signal: AbortSignal.timeout(1500) }).then((x) => x.ok, () => false);
+  if (flag('--no-helper') || running) {
+    if (running) console.log('    The IngrainedCut helper is already running.');
+    console.log('');
+    process.exit(0);
+  }
+}
+
 const startupProject = argv.find((a) => /\.icut$/i.test(a) && fs.existsSync(a)) ?? null;
 
 const core = createCore({
@@ -220,7 +249,7 @@ const core = createCore({
   hasEditor: () => !!editor && editor.readyState === 1,
   version: pkg.version,
   startupProject,
-  mcpServerPath: installMcpServer(),
+  mcpServerPath,
   dialogs: {
     openMedia: () =>
       openFiles({

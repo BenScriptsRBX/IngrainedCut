@@ -39,7 +39,7 @@ The easiest way to use IngrainedCut is the website: **https://www.ingrainedcut.c
 3. To edit with AI (Claude, Codex or Cursor, with your own account), run the free helper on your computer:
 
    ```bash
-   npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.9.tgz
+   npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.10.tgz
    ```
 
    The exact command for the current version is always on the [setup page](https://www.ingrainedcut.com/download).
@@ -170,16 +170,17 @@ Folder / Ask Claude to revise). Requires Node 22+ and FFmpeg; `npx` fetches the 
 
 ### Use your own Claude Code, Codex or Cursor (MCP)
 
-This is how a Claude, ChatGPT or Cursor plan works with IngrainedCut: run that app yourself and register IngrainedCut's
-MCP server once. **Help → Use your own Claude Code, Codex or Cursor** shows the exact commands. The npx helper copies
-its server to `~/.ingrainedcut/mcp-server` on every start, so the path stays the same across updates:
+This is how a Claude, ChatGPT or Cursor plan works with IngrainedCut: run that app yourself and connect it to
+IngrainedCut's MCP server once. **Help → Use your own Claude Code, Codex or Cursor** gives one command per app, which
+works in any terminal (no `claude` or `codex` on the PATH needed):
 
 ```bash
-claude mcp add --scope user ingrainedcut -- node "<home>/.ingrainedcut/mcp-server/mcp/server.mjs"
-codex mcp add ingrainedcut -- node "<home>/.ingrainedcut/mcp-server/mcp/server.mjs"
+npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.10.tgz --connect claude   # or codex, cursor
 ```
 
-Cursor takes the same server in `~/.cursor/mcp.json`. Keep IngrainedCut (or the helper) running while you edit.
+It copies the server to `~/.ingrainedcut/mcp-server` (refreshed on every helper start, so the path survives updates),
+adds it to that app's user settings (`~/.claude.json` through Claude Code itself, `~/.codex/config.toml`,
+`~/.cursor/mcp.json`), then starts the helper. Add `--no-helper` when the desktop app is the editor.
 
 The server reaches the running editor through a token-protected local connection described in
 `~/.ingrainedcut/bridge.json`.

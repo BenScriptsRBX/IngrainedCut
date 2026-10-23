@@ -5,8 +5,6 @@ type Unsub = () => void;
 declare global {
   /** package.json version, injected by Vite */
   const __ICUT_VERSION__: string;
-  /** Apps a user can connect to IngrainedCut's MCP server themselves (electron/mcpClients.mjs). */
-  type McpClient = 'claude' | 'codex' | 'cursor';
   interface ProviderStatus {
     installed: boolean;
     loggedIn: boolean;
@@ -66,8 +64,6 @@ declare global {
       providerLogin(p: 'claude' | 'codex' | 'cursor'): Promise<{ ok: boolean; out: string }>;
       providerCancelLogin(): Promise<void>;
       providerInstall(p: 'codex'): Promise<{ ok: boolean; out: string }>;
-      mcpClients(): Promise<Record<McpClient, { installed: boolean; connected: boolean; current: boolean }>>;
-      mcpConnect(client: McpClient): Promise<{ ok: boolean; out: string }>;
       engineTool(name: 'detect_scenes' | 'detect_silence' | 'transcribe' | 'analyze_loudness', args: any): Promise<{ content: any[]; isError?: boolean }>;
       providerModels(p: 'claude' | 'codex' | 'cursor'): Promise<ProviderModel[]>;
       onExternalAgents(cb: (list: { id: string; name: string; since: number; last: number; lastTool?: string; calls: number }[]) => void): Unsub;

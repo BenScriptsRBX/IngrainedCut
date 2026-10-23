@@ -1,6 +1,6 @@
-// One-click setup for people who use IngrainedCut from their own Claude Code, Codex or Cursor (on their own plan):
-// adds IngrainedCut's MCP server to that app's user settings, the same entry its own `mcp add` would write, so nobody
-// needs a terminal or `claude` on their PATH.
+// The helper's `--connect claude|codex|cursor` (server/web.mjs), for people who use IngrainedCut from their own Claude
+// Code, Codex or Cursor (on their own plan): adds IngrainedCut's MCP server to that app's user settings, the same entry
+// its own `mcp add` would write, so it works without `claude` or `codex` on the PATH.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

@@ -8,21 +8,41 @@ import { Icon } from './Icons';
 /** The one-line setup: npx runs the helper package straight from this website (no npm account needed). */
 export const HELPER_COMMAND = `npx -y ${location.origin}/helper/ingrainedcut-${__ICUT_VERSION__}.tgz`;
 
-function CopyCommand() {
-  const [copied, setCopied] = useState(false);
+/** Apps people bring with their own plan; the helper's `--connect <app>` adds IngrainedCut to them (server/web.mjs). */
+export const MCP_APPS = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor' } as const;
+export type McpApp = keyof typeof MCP_APPS;
+
+/** The one command that connects the app: on the website it also starts the helper (the desktop app is the editor). */
+export const connectCommand = (app: McpApp) =>
+  `npx -y ${isSite ? location.origin : 'https://www.ingrainedcut.com'}/helper/ingrainedcut-${__ICUT_VERSION__}.tgz --connect ${app}${isSite ? '' : ' --no-helper'}`;
+
+/** The app picked last (shared by the AI panel and the Help dialog). */
+export function useMcpApp(initial: McpApp = 'claude') {
+  const [app, setApp] = useState<McpApp>(() => {
+    try {
+      const v = localStorage.getItem('icut-mcp-app');
+      return v && v in MCP_APPS ? (v as McpApp) : initial;
+    } catch {
+      return initial;
+    }
+  });
+  const pick = (a: McpApp) => {
+    setApp(a);
+    try {
+      localStorage.setItem('icut-mcp-app', a);
+    } catch {}
+  };
+  return [app, pick] as const;
+}
+
+export function AppPicker({ app, onChange }: { app: McpApp; onChange: (a: McpApp) => void }) {
   return (
-    <div className="helper-cmd">
-      <code>{HELPER_COMMAND}</code>
-      <button
-        className="btn sm"
-        onClick={async () => {
-          await navigator.clipboard.writeText(HELPER_COMMAND).catch(() => {});
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1600);
-        }}
-      >
-        {copied ? 'Copied' : 'Copy'}
-      </button>
+    <div className="app-picker">
+      {(Object.keys(MCP_APPS) as McpApp[]).map((a) => (
+        <button key={a} className={'btn sm' + (a === app ? ' primary' : '')} onClick={() => onChange(a)}>
+          {MCP_APPS[a]}
+        </button>
+      ))}
     </div>
   );
 }
@@ -33,7 +53,7 @@ function siteSettingsUrl() {
   return `${scheme}://settings/content/siteDetails?site=${encodeURIComponent(location.origin)}`;
 }
 
-function CopyLine({ text }: { text: string }) {
+export function CopyLine({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="helper-cmd">
@@ -97,30 +117,43 @@ function Steps() {
     <ol className="helper-steps">
       <li>
         Open a terminal and run (needs Node.js 22+):
-        <CopyCommand />
+        <CopyLine text={HELPER_COMMAND} />
       </li>
       <li>Keep it running and click Connect — after the first time, this page connects by itself. Your browser may ask to allow access to your local network — choose Allow.</li>
     </ol>
   );
 }
 
-/** Replaces the chat while the editor runs without the helper. */
+/** Replaces the chat while the editor runs without the helper: one command connects the user's own app and starts it. */
 export function HelperNeeded() {
+  const [app, setApp] = useMcpApp();
   return (
     <div className="helper-needed">
       <div className="welcome-mark">
         <Icon name="sparkle" size={28} />
       </div>
       <h3>Edit with AI</h3>
-      <p>
-        Claude, Codex and Cursor run on your own computer, with your own API key or account, through the free IngrainedCut helper. Everything else — editing,
-        import and export — already works right here in your browser.
-      </p>
-      <Steps />
-      <ConnectButton />
+      <p>Use the Claude, ChatGPT or Cursor plan you already have: pick your app, run one command, and it edits this timeline.</p>
+      <ol className="helper-steps">
+        <li>
+          Pick your app:
+          <AppPicker app={app} onChange={setApp} />
+        </li>
+        <li>
+          Open a terminal and run this (needs Node.js 22+). It connects {MCP_APPS[app]} and starts the IngrainedCut helper — keep that window open:
+          <CopyLine text={connectCommand(app)} />
+        </li>
+        <li>
+          Click Connect. Your browser may ask to allow access to your local network — choose Allow.
+          <div style={{ marginTop: 6 }}>
+            <ConnectButton />
+          </div>
+        </li>
+        <li>Open a new {MCP_APPS[app]} session and ask it to edit your IngrainedCut timeline.</li>
+      </ol>
       <p className="hint">
-        The helper also adds transcription, silence and scene detection, and ProRes / GIF / MP3 export. It only accepts this website, and your media never
-        leaves your computer.
+        Prefer to chat right here? Once the helper is connected, add your own Anthropic or OpenAI API key in Settings. The helper also adds transcription,
+        silence and scene detection, and ProRes / GIF / MP3 export; your media never leaves your computer.
       </p>
     </div>
   );

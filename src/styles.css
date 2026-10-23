@@ -546,3 +546,5 @@ a.logo { text-decoration: none; }
 .pp-offline span { flex: 1; }
 .helper-chip.found { border-color: rgba(59, 178, 107, 0.6); color: #bbf7d0; }
 .helper-chip.found .hc-dot { background: #3bb26b; animation: pulse 1s infinite; }
+/* AI panel / Help: pick Claude Code, Codex or Cursor (HelperConnect.tsx AppPicker) */
+.app-picker { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }

@@ -7,8 +7,8 @@ import { useEditor, setS } from '../store';
 import { sequenceDuration } from '../ops';
 import { fmtTC } from '../time';
 import { Icon } from './Icons';
-import { AuthBox, ProviderAuth } from './Dialogs';
-import { HelperNeeded } from './HelperConnect';
+import { ProviderAuth } from './Dialogs';
+import { AppPicker, CopyLine, HelperNeeded, MCP_APPS, connectCommand, useMcpApp } from './HelperConnect';
 import { isBrowserEngine } from '../webBridge';
 
 const SUGGESTIONS = [
@@ -643,20 +643,25 @@ function AuthCallout() {
   const provider = useChat((s) => s.provider);
   const [ready, setReady] = useState(true);
   useEffect(() => void window.icut.providerStatus(provider).then((s) => setReady(s.ready), () => setReady(true)), [provider]);
+  const [app, setApp] = useMcpApp(provider);
   if (ready) return null;
-  if (provider !== 'claude')
+  if (provider === 'cursor')
     return (
       <div className="auth-callout">
         <b>Connect {agentName(provider)}</b>
         <ProviderAuth provider={provider} compact />
       </div>
     );
+  // the built-in Claude / Codex chat runs on an API key; a plan works through the user's own app, connected with one command
   return (
     <div className="auth-callout">
-      <b>Set up Claude</b>
-      <AuthBox compact />
+      <b>Use your own {MCP_APPS[app]}</b>
+      <div className="hint">Have a Claude, ChatGPT or Cursor plan? Pick your app and run this once in a terminal:</div>
+      <AppPicker app={app} onChange={setApp} />
+      <CopyLine text={connectCommand(app)} />
+      <div className="hint">Then open a new {MCP_APPS[app]} session and ask it to edit your IngrainedCut timeline.</div>
       <div className="hint">
-        Add your key in <a onClick={() => setS({ dialog: 'settings' })}>Settings</a>.
+        Or chat right here: add your own {provider === 'codex' ? 'OpenAI' : 'Anthropic'} API key in <a onClick={() => setS({ dialog: 'settings' })}>Settings</a>.
       </div>
     </div>
   );

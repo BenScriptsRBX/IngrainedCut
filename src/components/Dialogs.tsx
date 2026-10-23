@@ -5,6 +5,7 @@ import { Icon } from './Icons';
 import { runExport, cancelExport, BROWSER_FORMATS, type ExportOptions } from '../exporter';
 import { isBrowserEngine, isSite } from '../webBridge';
 import { SyncDialog, SilenceDialog } from './EditDialogs';
+import { AppPicker, MCP_APPS, connectCommand, useMcpApp } from './HelperConnect';
 import { sequenceDuration, setClipSpeed } from '../ops';
 import { fmtTC } from '../time';
 import { MODELS, EFFORTS, setModel, useChat } from '../chatStore';
@@ -670,9 +671,6 @@ function CopyBox({ text, pre }: { text: string; pre?: boolean }) {
   );
 }
 
-const MCP_APPS = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor' } as const;
-type McpApp = keyof typeof MCP_APPS;
-
 /**
  * The way to use a Claude, ChatGPT or Cursor subscription with IngrainedCut: the user runs that company's own app and
  * connects it to IngrainedCut's MCP server, so the plan is only ever used by its own app. (The chat panel's built-in
@@ -680,21 +678,13 @@ type McpApp = keyof typeof MCP_APPS;
  * (server/web.mjs) adds IngrainedCut to that app, then keeps running as the helper.
  */
 function McpDialog({ onClose }: { onClose: () => void }) {
-  const [app, setApp] = useState<McpApp>('claude');
-  const site = isSite ? location.origin : 'https://www.ingrainedcut.com';
-  // the desktop app is the editor itself, so only the connecting part is needed there
-  const cmd = `npx -y ${site}/helper/ingrainedcut-${__ICUT_VERSION__}.tgz --connect ${app}${isSite ? '' : ' --no-helper'}`;
+  const [app, setApp] = useMcpApp();
+  const cmd = connectCommand(app);
   return (
     <Modal title="Use your own Claude Code, Codex or Cursor" onClose={onClose} width={640}>
       <p>Have a Claude, ChatGPT or Cursor plan? Connect that app to IngrainedCut and it edits the timeline open here, on your own plan.</p>
       <div className="form-h">1. Pick your app</div>
-      <div className="row" style={{ gap: 8 }}>
-        {(Object.keys(MCP_APPS) as McpApp[]).map((a) => (
-          <button key={a} className={'btn sm' + (a === app ? ' primary' : '')} onClick={() => setApp(a)}>
-            {MCP_APPS[a]}
-          </button>
-        ))}
-      </div>
+      <AppPicker app={app} onChange={setApp} />
       <div className="form-h">2. Run this in a terminal</div>
       <CopyBox text={cmd} />
       <p className="hint">

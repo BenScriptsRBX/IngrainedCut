@@ -1,5 +1,5 @@
 {
-  "comment": "Websites allowed to use this helper. Add your custom domain here if you move off ingrainedcut.vercel.app.",
-  "origins": ["https://ingrainedcut.vercel.app", "http://localhost:3000"],
-  "openUrl": "https://ingrainedcut.vercel.app/projects"
+  "comment": "Websites allowed to use this helper (the editor on these origins can connect). ingrainedcut.vercel.app now redirects to www.ingrainedcut.com.",
+  "origins": ["https://www.ingrainedcut.com", "https://ingrainedcut.com", "https://ingrainedcut.vercel.app", "http://localhost:3000"],
+  "openUrl": "https://www.ingrainedcut.com/projects"
 }

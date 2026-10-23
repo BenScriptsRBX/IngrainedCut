@@ -16,6 +16,14 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [{ source: '/editor', destination: '/editor/index.html' }];
   },
+  // the site moved to www.ingrainedcut.com: send pages there, but keep /api (webhooks) and /helper (old npx commands) working
+  async redirects() {
+    const from = [{ type: 'host' as const, value: 'ingrainedcut.vercel.app' }];
+    return [
+      { source: '/', has: from, destination: 'https://www.ingrainedcut.com/', permanent: true },
+      { source: '/:path((?!api/|helper/).+)', has: from, destination: 'https://www.ingrainedcut.com/:path', permanent: true },
+    ];
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },

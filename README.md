@@ -7,18 +7,18 @@
 <p align="center"><b>The video editor you can talk to.</b></p>
 
 <p align="center">
-  <a href="https://ingrainedcut.vercel.app"><img src="https://img.shields.io/badge/Open_IngrainedCut-ingrainedcut.vercel.app-8b5cf6?style=for-the-badge" alt="Open IngrainedCut at ingrainedcut.vercel.app"></a>
+  <a href="https://www.ingrainedcut.com"><img src="https://img.shields.io/badge/Open_IngrainedCut-ingrainedcut.com-8b5cf6?style=for-the-badge" alt="Open IngrainedCut at ingrainedcut.vercel.app"></a>
   &nbsp;
   <a href="https://ko-fi.com/ingrainedcut"><img src="docs/kofi-button.svg" alt="Support IngrainedCut on Ko-fi" height="28"></a>
 </p>
 
 <p align="center">
-  <b>Use it now at <a href="https://ingrainedcut.vercel.app">ingrainedcut.vercel.app</a></b> — free, nothing to install, your footage never leaves your computer.<br>
-  <a href="https://ingrainedcut.vercel.app">Website</a> · <a href="https://ingrainedcut.vercel.app/download">AI helper setup</a> · <a href="LICENSE">AGPL-3.0</a>
+  <b>Use it now at <a href="https://www.ingrainedcut.com">ingrainedcut.com</a></b> — free, nothing to install, your footage never leaves your computer.<br>
+  <a href="https://www.ingrainedcut.com">Website</a> · <a href="https://www.ingrainedcut.com/download">AI helper setup</a> · <a href="LICENSE">AGPL-3.0</a>
 </p>
 
 <p align="center">
-  <a href="https://ingrainedcut.vercel.app"><img src="docs/website.png" alt="The IngrainedCut website" width="900"></a>
+  <a href="https://www.ingrainedcut.com"><img src="docs/website.png" alt="The IngrainedCut website" width="900"></a>
 </p>
 
 A Premiere Pro–style non-linear video editor with an AI editor built in. A chat panel on the right talks to
@@ -31,7 +31,7 @@ AI agents by running a small local helper.
 
 ## Use it online
 
-The easiest way to use IngrainedCut is the website: **https://ingrainedcut.vercel.app**
+The easiest way to use IngrainedCut is the website: **https://www.ingrainedcut.com**
 
 1. Sign in with Google and create a project. Your timelines are saved to your account.
 2. Import footage, cut, color grade, add titles and export — all in your browser (Chrome or Edge). Media stays on
@@ -39,10 +39,10 @@ The easiest way to use IngrainedCut is the website: **https://ingrainedcut.verce
 3. To edit with AI (Claude, Codex or Cursor, with your own account), run the free helper on your computer:
 
    ```bash
-   npx -y https://ingrainedcut.vercel.app/helper/ingrainedcut-0.2.6.tgz
+   npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.7.tgz
    ```
 
-   The exact command for the current version is always on the [setup page](https://ingrainedcut.vercel.app/download).
+   The exact command for the current version is always on the [setup page](https://www.ingrainedcut.com/download).
 
 The rest of this README is for running IngrainedCut from source: the desktop app, local browser mode and the website
 itself.

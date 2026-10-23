@@ -671,14 +671,30 @@ function CopyBox({ text, pre }: { text: string; pre?: boolean }) {
 }
 
 /**
+ * How to run the user's Claude Code from a terminal: `claude` when it's on PATH, else the copy the engine found (for
+ * example the one inside the Claude desktop app) by its full path, in PowerShell's syntax on Windows.
+ */
+function claudeCommand(cc: { path?: string; source?: string } | null) {
+  if (!cc?.path || cc.source === 'path') return 'claude';
+  const win = /win/i.test(navigator.platform) || cc.path.includes('\\');
+  if (/\.js$/i.test(cc.path)) return `node "${cc.path}"`;
+  return win ? `& "${cc.path}"` : `"${cc.path}"`;
+}
+
+/**
  * The way to use a Claude, ChatGPT or Cursor subscription with IngrainedCut: the user runs that company's own app and
  * connects it to IngrainedCut's MCP server, so the subscription is only ever used by its own app. (The chat panel's
  * built-in Claude and Codex run on API keys; see electron/agent.mjs.)
  */
 function McpDialog({ onClose }: { onClose: () => void }) {
   const [info, setInfo] = useState<any>(null);
-  useEffect(() => void window.icut.appInfo().then(setInfo), []);
+  const [cc, setCc] = useState<{ path?: string; source?: string } | null>(null);
+  useEffect(() => {
+    window.icut.appInfo().then(setInfo);
+    window.icut.authStatus().then(setCc, () => {});
+  }, []);
   const p = info?.mcpServerPath as string | undefined;
+  const claudeCmd = p ? `${claudeCommand(cc)} mcp add --scope user ingrainedcut -- node "${p}"` : '';
   const json = p ? JSON.stringify({ mcpServers: { ingrainedcut: { command: 'node', args: [p] } } }, null, 2) : '';
   return (
     <Modal title="Use your own Claude Code, Codex or Cursor (MCP)" onClose={onClose} width={660}>
@@ -690,8 +706,8 @@ function McpDialog({ onClose }: { onClose: () => void }) {
         <p className="warn-text">Connect the IngrainedCut helper first (the chip at the top right), then open this again.</p>
       ) : (
         <>
-          <div className="form-h">Claude Code — run once in a terminal</div>
-          <CopyBox text={`claude mcp add --scope user ingrainedcut -- node "${p}"`} />
+          <div className="form-h">Claude Code — run once in {claudeCmd.startsWith('& ') ? 'PowerShell' : 'a terminal'}</div>
+          <CopyBox text={claudeCmd} />
           <p className="hint">
             Then start <code className="mono">claude</code> in any folder (or use Claude Code in the Claude desktop app or your IDE) and ask, for example, “cut
             the silences in my IngrainedCut timeline”.

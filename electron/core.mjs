@@ -9,6 +9,7 @@ import { startExport, writeFrame, finishExport, cancelExport, writeTempWav, wcSt
 import { getSettings, saveSettings, addRecentProject } from './settings.mjs';
 import { AgentManager } from './agent.mjs';
 import { findClaudeCode, CLAUDE_CODE_INSTALL } from './claudeCode.mjs';
+import { RelayAgent } from './relayAgent.mjs';
 import { CodexAgent, CursorAgent, providerStatus, providerLogin, cancelProviderLogin, providerModels, installCodex } from './otherAgents.mjs';
 import { TOOL_DEFS } from './tools.mjs';
 import { startBridge, BRIDGE_FILE } from './bridge.mjs';
@@ -146,10 +147,28 @@ export function createCore(host) {
     throw new Error('Unknown engine tool ' + name);
   }
 
-  async function dispatch(name, args) {
+  let relayCalls = 0;
+  async function dispatch(name, args, client) {
+    // "Your own app" (relayAgent.mjs): the user's own session picks up panel messages and answers them
+    if (name === 'wait_for_prompt') {
+      const msg = await agents.relay.wait(client ?? { id: 'mcp', name: 'Your app' }, Math.min(Math.max(Number(args.timeout_seconds) || 50, 5), 240) * 1000);
+      return text(
+        msg == null
+          ? 'No new message yet. Call wait_for_prompt again now to keep listening — the user types in IngrainedCut’s chat panel.'
+          : `Message from the user in IngrainedCut's chat panel:\n\n${msg}\n\nDo what it asks with the IngrainedCut tools, answer with send_reply, then call wait_for_prompt again.`,
+      );
+    }
+    if (name === 'send_reply') {
+      agents.relay.reply(client ?? { id: 'mcp', name: 'Your app' }, String(args.text ?? ''), args.done !== false);
+      return text('Shown in the chat panel. Now call wait_for_prompt to listen for the next message.');
+    }
     const def = TOOL_DEFS.find((d) => d.name === name);
     if (!def) throw new Error(`Unknown tool ${name}`);
+    const relayed = provider() === 'relay' && agents.relay.linked(client);
+    const id = `relay-${++relayCalls}`;
+    if (relayed) agents.relay.toolUse(id, name, args);
     const res = def.where === 'main' ? await runMainTool(name, args) : await callRenderer(name, args);
+    if (relayed) agents.relay.toolResult(id, res);
     emit('agent:tool-activity', { name, args });
     return res;
   }
@@ -339,12 +358,18 @@ export function createCore(host) {
   }
 
   const agentOpts = { emit, dispatch, getSettings, getCwd: agentCwd, askPermission, getDirs: projectDirs, getCompositionsDir: compositionsDir, getBridge: () => bridge?.info() };
-  // the chat runs one agent at a time, chosen in the panel: Claude Code, Codex or Cursor (each with the user's own login)
-  const agents = { claude: new AgentManager(agentOpts), codex: new CodexAgent(agentOpts), cursor: new CursorAgent(agentOpts) };
+  // the chat runs one agent at a time, chosen in the panel: Claude (API key), Codex (API key), Cursor (the user's login), or
+  // the user's own Claude Code / Codex / Cursor session connected over MCP (relay)
+  const agents = {
+    claude: new AgentManager(agentOpts),
+    codex: new CodexAgent(agentOpts),
+    cursor: new CursorAgent(agentOpts),
+    relay: new RelayAgent({ emit, onLink: (st) => emit('relay:status', st) }),
+  };
   const provider = () => (agents[getSettings().provider] ? getSettings().provider : 'claude');
   const active = () => agents[provider()];
   /** settings keys holding each provider's model and effort */
-  const MODEL_KEYS = { claude: ['model', 'effort'], codex: ['codexModel', 'codexEffort'], cursor: ['cursorModel', null] };
+  const MODEL_KEYS = { claude: ['model', 'effort'], codex: ['codexModel', 'codexEffort'], cursor: ['cursorModel', null], relay: [null, null] };
 
   // ---------- handlers ----------
   // the editor's own buttons (Scene Edit Detection, …) use the same analysis tools the AI does
@@ -364,6 +389,7 @@ export function createCore(host) {
   handle('agent:set-model', async ({ model, effort }) => {
     const p = provider();
     const [mk, ek] = MODEL_KEYS[p];
+    if (!mk) return; // your own app picks its own model
     const prev = getSettings();
     saveSettings({ [mk]: model, ...(ek ? { [ek]: effort } : {}) });
     if (model !== prev[mk]) await active().setModel(model);
@@ -377,8 +403,8 @@ export function createCore(host) {
     }
     return getSettings();
   });
-  handle('providers:status', (p) => (p === 'claude' ? claudeStatus() : providerStatus(p, getSettings())));
-  handle('providers:models', (p) => (p === 'claude' ? [] : providerModels(p)));
+  handle('providers:status', (p) => (p === 'claude' ? claudeStatus() : p === 'relay' ? agents.relay.status() : providerStatus(p, getSettings())));
+  handle('providers:models', (p) => (p === 'claude' || p === 'relay' ? [] : providerModels(p)));
   handle('providers:login', async (p) => {
     if (p === 'claude') return { ok: false, out: SIGN_IN_THERE };
     const r = await providerLogin(p, (line) => {

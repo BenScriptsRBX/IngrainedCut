@@ -258,6 +258,7 @@ function installWebBridge() {
     permissionReply: (r: any) => send('agent:permission-reply', r),
     onAgentEvent: on('agent:event'),
     onToolActivity: on('agent:tool-activity'),
+    onRelayStatus: on('relay:status'),
     onToolInvoke: on('tool:invoke'),
     toolResult: (id: number, result: any) => send('tool:result', { id, result }),
     getSettings: () => invoke('settings:get'),

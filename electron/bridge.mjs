@@ -37,7 +37,7 @@ export function startBridge(dispatch, onClient) {
         try {
           const { name, args } = JSON.parse(body || '{}');
           onClient?.(client, name);
-          send(200, await dispatch(name, args || {}));
+          send(200, await dispatch(name, args || {}, client));
         } catch (e) {
           send(200, { content: [{ type: 'text', text: 'Error: ' + (e?.message || e) }], isError: true });
         }

@@ -44,16 +44,17 @@ export interface AttachedChat {
   messages: number;
 }
 
-export type Provider = 'claude' | 'codex' | 'cursor';
+export type Provider = 'claude' | 'codex' | 'cursor' | 'relay';
 
 export const PROVIDERS: { id: Provider; name: string; short: string; desc: string }[] = [
   { id: 'claude', name: 'Claude', short: 'Claude', desc: 'Anthropic Claude with your Claude account or API key' },
   { id: 'codex', name: 'Codex', short: 'Codex', desc: 'OpenAI Codex with your ChatGPT account or OpenAI API key' },
   { id: 'cursor', name: 'Cursor', short: 'Cursor', desc: 'Cursor Agent with your Cursor account' },
+  { id: 'relay', name: 'Your own app', short: 'Your app', desc: 'Your own Claude Code, Codex or Cursor session, on your own plan, taking prompts from here' },
 ];
 
 /** settings keys holding each provider's model and effort (Cursor has no effort setting) */
-const MODEL_KEYS: Record<Provider, [string, string | null]> = { claude: ['model', 'effort'], codex: ['codexModel', 'codexEffort'], cursor: ['cursorModel', null] };
+const MODEL_KEYS: Record<Provider, [string, string | null]> = { claude: ['model', 'effort'], codex: ['codexModel', 'codexEffort'], cursor: ['cursorModel', null], relay: ['relayModel', null] };
 
 export const agentName = (p: Provider = useChat.getState().provider) => PROVIDERS.find((x) => x.id === p)?.short ?? 'Claude';
 
@@ -138,13 +139,14 @@ export const EFFORTS = [
 ];
 
 export function modelLabel(id: string, provider: Provider = C().provider) {
+  if (provider === 'relay') return 'Your own app';
   if (provider === 'claude') return MODELS.find((m) => m.id === id)?.label ?? id;
   if (!id) return provider === 'cursor' ? 'Auto' : 'Default model';
   return C().catalog[provider]?.find((m) => m.id === id)?.label ?? id;
 }
 
 export async function loadCatalog(p: Provider) {
-  if (p === 'claude' || C().catalog[p]?.length) return;
+  if (p === 'claude' || p === 'relay' || C().catalog[p]?.length) return;
   const list = await window.icut.providerModels(p).catch(() => []);
   setC((s) => ({ catalog: { ...s.catalog, [p]: list } }));
 }

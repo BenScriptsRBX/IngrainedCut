@@ -59,8 +59,9 @@ declare global {
       sessionTranscript(id: string): Promise<{ text: string; messages: number }>;
       sessionContinue(id: string): Promise<{ sessionId: string }>;
       agentSetBypass(on: boolean): Promise<void>;
-      agentSetProvider(p: 'claude' | 'codex' | 'cursor'): Promise<any>;
-      providerStatus(p: 'claude' | 'codex' | 'cursor'): Promise<ProviderStatus>;
+      agentSetProvider(p: 'claude' | 'codex' | 'cursor' | 'relay'): Promise<any>;
+      providerStatus(p: 'claude' | 'codex' | 'cursor' | 'relay'): Promise<ProviderStatus>;
+      onRelayStatus(cb: (st: ProviderStatus) => void): Unsub;
       providerLogin(p: 'claude' | 'codex' | 'cursor'): Promise<{ ok: boolean; out: string }>;
       providerCancelLogin(): Promise<void>;
       providerInstall(p: 'codex'): Promise<{ ok: boolean; out: string }>;

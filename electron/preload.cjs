@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('icut', {
   permissionReply: (r) => ipcRenderer.send('agent:permission-reply', r),
   onAgentEvent: on('agent:event'),
   onToolActivity: on('agent:tool-activity'),
+  onRelayStatus: on('relay:status'),
   onToolInvoke: on('tool:invoke'),
   toolResult: (id, result) => ipcRenderer.send('tool:result', { id, result }),
   // settings / app

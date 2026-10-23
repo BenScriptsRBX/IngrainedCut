@@ -306,11 +306,13 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
   const list: { id: string; label: string; desc?: string }[] =
     provider === 'claude'
       ? MODELS.filter((m) => !m.older || showOlder || m.id === model)
-      : [
+      : provider === 'relay'
+        ? [] // your own app uses its own model
+        : [
           { id: '', label: provider === 'cursor' ? 'Auto' : 'Default model', desc: provider === 'cursor' ? 'Cursor picks the model' : 'The model set in your Codex config' },
           ...(catalog ?? []),
         ];
-  const known = list.some((m) => m.id === model);
+  const known = provider === 'relay' || list.some((m) => m.id === model);
   // Codex: the reasoning levels the chosen model supports; Cursor has no effort setting
   const efforts =
     provider === 'claude'
@@ -323,13 +325,19 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
     setOpen(false);
   };
   const statusText = (st: ProviderStatus | null | undefined) =>
-    st === undefined ? '…' : st === null ? '' : !st.installed ? 'Not installed' : st.loggedIn ? `Signed in${st.method ? ' · ' + st.method : ''}` : st.apiKey ? 'Using API key' : 'Not signed in';
+    st === undefined
+      ? '…'
+      : st === null
+        ? ''
+        : 'app' in st // your own app
+          ? st.ready ? `Connected · ${st.method}` : 'Not connected'
+          : !st.installed ? 'Not installed' : st.loggedIn ? `Signed in${st.method ? ' · ' + st.method : ''}` : st.apiKey ? 'Using API key' : 'Not signed in';
   const cur = status[provider];
   return (
     <div className="model-picker" ref={ref}>
       <button className={'model-btn' + (open ? ' open' : '')} onClick={() => setOpen(!open)} title="Choose agent, model and effort">
         <span className="model-name">{modelLabel(model, provider)}</span>
-        {provider !== 'cursor' && <span className="model-effort">{effort}</span>}
+        {provider !== 'cursor' && provider !== 'relay' && <span className="model-effort">{effort}</span>}
         <Icon name="chevronDown" size={11} />
       </button>
       {open && (
@@ -343,9 +351,10 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
               </button>
             ))}
           </div>
-          {provider !== 'claude' && cur && !cur.ready && <ProviderAuth provider={provider} compact />}
-          <div className="mp-h">Model</div>
-          {provider !== 'claude' && !catalog && <div className="ag-empty">Loading models…</div>}
+          {provider === 'relay' && cur && !cur.ready && <RelaySetup />}
+          {provider !== 'claude' && provider !== 'relay' && cur && !cur.ready && <ProviderAuth provider={provider} compact />}
+          {provider !== 'relay' && <div className="mp-h">Model</div>}
+          {provider !== 'claude' && provider !== 'relay' && !catalog && <div className="ag-empty">Loading models…</div>}
           {list.map((m) => (
             <div key={m.id || 'default'} className={'mp-item' + (m.id === model ? ' on' : '')} onClick={() => pick(m.id)}>
               <span className="mp-check">{m.id === model && <Icon name="check" size={12} />}</span>
@@ -371,7 +380,7 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
               Show older models
             </button>
           )}
-          <div className="mp-custom">
+          <div className="mp-custom" hidden={provider === 'relay'}>
             <input
               placeholder={provider === 'claude' ? 'Custom model ID, e.g. claude-sonnet-5-5' : 'Custom model ID'}
               value={custom}
@@ -639,12 +648,36 @@ function PastChats() {
   );
 }
 
+/** "Your own app": connect a Claude Code, Codex or Cursor session the user runs, so it takes its prompts from this panel. */
+function RelaySetup() {
+  const [app, setApp] = useMcpApp();
+  return (
+    <>
+      <div className="hint">Your own Claude Code, Codex or Cursor answers here, on your own plan. Pick it and run this once in a terminal:</div>
+      <AppPicker app={app} onChange={setApp} />
+      <CopyLine text={connectCommand(app)} />
+      <div className="hint">
+        Then open {MCP_APPS[app]} and tell it: <b>connect to IngrainedCut</b>. Keep that session open — you type here, and it answers here.
+      </div>
+    </>
+  );
+}
+
 function AuthCallout() {
   const provider = useChat((s) => s.provider);
   const [ready, setReady] = useState(true);
   useEffect(() => void window.icut.providerStatus(provider).then((s) => setReady(s.ready), () => setReady(true)), [provider]);
-  const [app, setApp] = useMcpApp(provider);
+  const [app, setApp] = useMcpApp(provider === 'codex' || provider === 'cursor' ? provider : 'claude');
+  // your own app connects (or drops) while the panel is open
+  useEffect(() => window.icut.onRelayStatus((st) => provider === 'relay' && setReady(st.ready)), [provider]);
   if (ready) return null;
+  if (provider === 'relay')
+    return (
+      <div className="auth-callout">
+        <b>Connect your own app</b>
+        <RelaySetup />
+      </div>
+    );
   if (provider === 'cursor')
     return (
       <div className="auth-callout">

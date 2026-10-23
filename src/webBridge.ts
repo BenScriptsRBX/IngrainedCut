@@ -9,9 +9,11 @@ import { createBrowserEngine, isBrowserPath, browserUrl, storeFiles } from './br
 
 export const isWeb = !(window as any).icut;
 export const isSite = isWeb && location.pathname.startsWith('/editor');
+/** The account editor served by the helper itself ("Open through the helper"): same origin, so no local-network permission. */
+export const viaHelper = isSite && !!(window as any).__ICUT_VIA_HELPER__;
 
 const HELPER_PORT = Number(new URLSearchParams(location.search).get('helper') || 5310);
-export const HELPER_ORIGIN = isSite ? `http://127.0.0.1:${HELPER_PORT}` : location.origin;
+export const HELPER_ORIGIN = isSite && !viaHelper ? `http://127.0.0.1:${HELPER_PORT}` : location.origin;
 
 const MEDIA_PREFIX = 'icut://media/';
 let mediaToken = '';
@@ -67,6 +69,7 @@ export async function helperReachable(timeoutMs = 1500) {
  * the helper when this browser has used it before (or already granted the permission), or when the user clicks Connect.
  */
 async function mayLookForHelper() {
+  if (viaHelper) return true;
   try {
     if (localStorage.getItem(HELPER_USED)) return true;
   } catch {}
@@ -132,7 +135,7 @@ function installWebBridge() {
     : 'Lost connection to the IngrainedCut server — reconnecting… (is `npm run web` still running?)';
 
   function connect() {
-    ws = isSite ? new WebSocket(`ws://127.0.0.1:${HELPER_PORT}/ws`) : new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+    ws = isSite && !viaHelper ? new WebSocket(`ws://127.0.0.1:${HELPER_PORT}/ws`) : new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
       open = true;

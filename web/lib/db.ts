@@ -34,10 +34,26 @@ export interface KofiPaymentTable {
 export interface UserTable {
   id: string;
   email: string;
+  name: string;
+}
+
+export interface HelperCodeTable {
+  code_hash: string;
+  user_id: string;
+  expires_at: Date;
+}
+
+export interface HelperTokenTable {
+  token_hash: string;
+  user_id: string;
+  created_at: Generated<Date>;
+  last_used_at: Generated<Date>;
 }
 
 export interface DB {
   user: UserTable;
+  helper_code: HelperCodeTable;
+  helper_token: HelperTokenTable;
   project: ProjectsTable;
   supporter_code: SupporterCodeTable;
   kofi_payment: KofiPaymentTable;

@@ -81,8 +81,20 @@ async function localNetworkPermission() {
   }
 }
 
+/** The way around a blocked permission: the website hands the project to the helper, which serves the editor itself. */
+function OpenThroughHelper() {
+  const project = new URLSearchParams(location.search).get('project') ?? '';
+  return (
+    <a className="btn primary sm" href={`/editor/local?project=${encodeURIComponent(project)}`} style={{ display: 'inline-block', margin: '6px 0' }}>
+      Open the editor through the helper
+    </a>
+  );
+}
+
 function ConnectButton() {
   const [state, setState] = useState<'idle' | 'checking' | 'missing' | 'blocked'>('idle');
+  // already blocked (the browser won't even ask): say so up front
+  useEffect(() => void localNetworkPermission().then((p) => p === 'denied' && setState('blocked')), []);
   return (
     <>
       <button
@@ -96,16 +108,23 @@ function ConnectButton() {
         {state === 'checking' ? 'Looking for the helper…' : 'Connect'}
       </button>
       {state === 'blocked' && (
-        <div className="hint warn-text">
-          Your browser is blocking this site from reaching the helper on your computer. Paste this into the address bar, set <b>Local network access</b> to{' '}
-          <b>Allow</b>, then come back and click Connect again:
+        <div className="hint">
+          <span className="warn-text">Your browser is blocking this site from reaching the helper on your computer.</span> That's fine: with the command above
+          running, open the editor through the helper instead — no browser settings needed.
+          <div>
+            <OpenThroughHelper />
+          </div>
+          Or allow it: paste this into the address bar and set <b>Local network access</b> to <b>Allow</b>.
           <CopyLine text={siteSettingsUrl()} />
         </div>
       )}
       {state === 'missing' && (
-        <div className="hint warn-text">
-          Couldn't reach the helper. Make sure the command above is still running, and if your browser asks to access devices on your local network,
-          choose Allow.
+        <div className="hint">
+          <span className="warn-text">Couldn't reach the helper.</span> Make sure the command above is still running. If your browser asked about devices on
+          your local network and you didn't allow it, open the editor through the helper instead:
+          <div>
+            <OpenThroughHelper />
+          </div>
         </div>
       )}
     </>

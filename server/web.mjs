@@ -33,6 +33,16 @@ const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
 const SITE = JSON.parse(fs.readFileSync(path.join(ROOT, 'server', 'site.json'), 'utf8'));
 const SITE_ORIGINS = new Set([...SITE.origins, ...(process.env.ICUT_SITE_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)]);
 const LOCAL_EDITOR = fs.existsSync(path.join(DIST, 'index.html'));
+// "Open through the helper": the website account the editor served from here uses (see /cloud/open)
+const CLOUD_FILE = path.join(os.homedir(), '.ingrainedcut', 'cloud.json');
+let cloud = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(CLOUD_FILE, 'utf8'));
+  } catch {
+    return null;
+  }
+})();
+const SITE_PAGES = /^\/(projects|login|account|licenses|terms|privacy|download)(\/|$)/;
 
 const STATIC_TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2' };
 
@@ -114,11 +124,57 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // the website hands its signed-in user to this helper (its /editor/local → here) when the browser won't let the site
+  // reach 127.0.0.1; the editor is then served from here and its account calls go through /api below
+  if (url.pathname === '/cloud/open') {
+    const site = url.searchParams.get('site') || '';
+    if (!SITE_ORIGINS.has(site)) return send(res, 400, 'Unknown website');
+    try {
+      const r = await fetch(`${site}/api/helper/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: url.searchParams.get('code') }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.token) return send(res, 400, j.error || `Could not open the project (HTTP ${r.status})`);
+      cloud = { site, token: j.token };
+      fs.mkdirSync(path.dirname(CLOUD_FILE), { recursive: true });
+      fs.writeFileSync(CLOUD_FILE, JSON.stringify(cloud), { mode: 0o600 });
+    } catch (e) {
+      return send(res, 502, `Could not reach ${site}: ${e.message}`);
+    }
+    // Lax, not Strict: this response ends a navigation that started on the website
+    res.writeHead(302, { 'Set-Cookie': `${COOKIE}=${TOKEN}; HttpOnly; SameSite=Lax; Path=/`, Location: `/editor/?project=${encodeURIComponent(url.searchParams.get('project') || '')}` });
+    return res.end();
+  }
+
+  if (url.pathname.startsWith('/api/')) {
+    const json = { 'Content-Type': 'application/json' };
+    if (!cookieOk(req) || !cloud) return send(res, 401, JSON.stringify({ error: 'Sign in required' }), json);
+    try {
+      const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : Buffer.concat(await Array.fromAsync(req));
+      const headers = { Authorization: `Bearer ${cloud.token}`, ...(req.headers['content-type'] ? { 'Content-Type': req.headers['content-type'] } : {}) };
+      const r = await fetch(cloud.site + url.pathname + url.search, { method: req.method, headers, body });
+      res.writeHead(r.status, { 'Content-Type': r.headers.get('content-type') || 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(Buffer.from(await r.arrayBuffer()));
+    } catch (e) {
+      return send(res, 502, JSON.stringify({ error: `Could not reach ${cloud.site}: ${e.message}` }), json);
+    }
+  }
+  // links from the editor to the website's own pages (projects, account, sign-in…)
+  if (cloud && SITE_PAGES.test(url.pathname)) {
+    res.writeHead(302, { Location: cloud.site + url.pathname + url.search });
+    return res.end();
+  }
+
   if (!cookieOk(req) || !LOCAL_EDITOR) return send(res, 401, LOCKED_PAGE, { 'Content-Type': 'text/html; charset=utf-8' });
-  let file = path.normalize(path.join(DIST, decodeURIComponent(url.pathname)));
+  // the account editor lives under /editor (like on the website); the local-mode editor at /
+  const underEditor = /^\/editor(\/|$)/.test(url.pathname);
+  const rel = underEditor ? url.pathname.slice('/editor'.length) || '/' : url.pathname;
+  let file = path.normalize(path.join(DIST, decodeURIComponent(rel)));
   if (!file.startsWith(DIST)) return send(res, 403, 'Forbidden');
-  if (url.pathname === '/' || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, 'index.html');
+  if (rel === '/' || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, 'index.html');
   res.writeHead(200, { 'Content-Type': STATIC_TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+  if (underEditor && file.endsWith('index.html')) {
+    // tells the editor it was served by this helper (src/webBridge.ts)
+    return res.end(fs.readFileSync(file, 'utf8').replace('<head>', '<head><script>window.__ICUT_VIA_HELPER__ = true</script>'));
+  }
   fs.createReadStream(file).pipe(res);
 });
 

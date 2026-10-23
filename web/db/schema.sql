@@ -29,3 +29,11 @@ create table if not exists "kofi_payment" ("transaction_id" text not null primar
 create index if not exists "kofi_payment_user_idx" on "kofi_payment" ("user_id");
 
 create index if not exists "kofi_payment_email_idx" on "kofi_payment" ("email");
+
+-- "Open through the helper" (lib/helperLink.ts): when the browser won't let the website reach the helper, the site hands
+-- the signed-in account to the helper with a one-time code, and the helper then calls the API with its own token.
+create table if not exists "helper_code" ("code_hash" text not null primary key, "user_id" text not null references "user" ("id") on delete cascade, "expires_at" timestamptz not null);
+
+create table if not exists "helper_token" ("token_hash" text not null primary key, "user_id" text not null references "user" ("id") on delete cascade, "created_at" timestamptz default CURRENT_TIMESTAMP not null, "last_used_at" timestamptz default CURRENT_TIMESTAMP not null);
+
+create index if not exists "helper_token_user_idx" on "helper_token" ("user_id");

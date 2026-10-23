@@ -2,12 +2,17 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { auth } from './auth';
 import { getDb } from './db';
+import { helperTokenUser } from './helperLink';
 
 /** Max stored timeline size per project (media is never uploaded — this is JSON only). */
 export const MAX_PROJECT_BYTES = 8 * 1024 * 1024;
 
+/** The signed-in user: from the session cookie, or from a helper's token (editor opened through the helper). */
 export async function apiUser() {
-  const s = await auth.api.getSession({ headers: await headers() });
+  const h = await headers();
+  const bearer = h.get('authorization')?.match(/^Bearer (icut_[\w-]+)$/)?.[1];
+  if (bearer) return helperTokenUser(bearer);
+  const s = await auth.api.getSession({ headers: h });
   return s?.user ?? null;
 }
 

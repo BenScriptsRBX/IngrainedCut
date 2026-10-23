@@ -39,7 +39,7 @@ The easiest way to use IngrainedCut is the website: **https://www.ingrainedcut.c
 3. To edit with AI (Claude, Codex or Cursor, with your own account), run the free helper on your computer:
 
    ```bash
-   npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.11.tgz
+   npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.12.tgz
    ```
 
    The exact command for the current version is always on the [setup page](https://www.ingrainedcut.com/download).
@@ -175,7 +175,7 @@ IngrainedCut's MCP server once. **Help → Use your own Claude Code, Codex or Cu
 works in any terminal (no `claude` or `codex` on the PATH needed):
 
 ```bash
-npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.11.tgz --connect claude   # or codex, cursor
+npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.12.tgz --connect claude   # or codex, cursor
 ```
 
 It copies the server to `~/.ingrainedcut/mcp-server` (refreshed on every helper start, so the path survives updates),

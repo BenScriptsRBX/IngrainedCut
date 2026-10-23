@@ -12,7 +12,9 @@ export const isSite = isWeb && location.pathname.startsWith('/editor');
 /** The account editor served by the helper itself ("Open through the helper"): same origin, so no local-network permission. */
 export const viaHelper = isSite && !!(window as any).__ICUT_VIA_HELPER__;
 
-const HELPER_PORT = Number(new URLSearchParams(location.search).get('helper') || 5310);
+export const HELPER_PORT = Number(new URLSearchParams(location.search).get('helper') || 5310);
+/** The website (where the helper downloads from), also when the editor is served by the helper. */
+export const SITE_ORIGIN = isSite && !viaHelper ? location.origin : 'https://www.ingrainedcut.com';
 export const HELPER_ORIGIN = isSite && !viaHelper ? `http://127.0.0.1:${HELPER_PORT}` : location.origin;
 
 const MEDIA_PREFIX = 'icut://media/';

@@ -1,7 +1,7 @@
 {
   "name": "ingrainedcut",
   "productName": "IngrainedCut",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "IngrainedCut - a non-linear video editor with Claude built in",
   "main": "electron/main.mjs",
   "type": "module",

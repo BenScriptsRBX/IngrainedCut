@@ -1,12 +1,12 @@
 // Website editor: the optional helper. Without it everything but the AI agents (and a few FFmpeg formats) runs in
 // the browser; these explain what it adds and connect to it.
 import React, { useEffect, useRef, useState } from 'react';
-import { connectHelper, engineMode, helperReachable, helperWasUsed, isSite } from '../webBridge';
+import { HELPER_PORT, SITE_ORIGIN, connectHelper, engineMode, helperReachable, helperWasUsed, isSite } from '../webBridge';
 import { S, toast } from '../store';
 import { Icon } from './Icons';
 
 /** The one-line setup: npx runs the helper package straight from this website (no npm account needed). */
-export const HELPER_COMMAND = `npx -y ${location.origin}/helper/ingrainedcut-${__ICUT_VERSION__}.tgz`;
+export const HELPER_COMMAND = `npx -y ${SITE_ORIGIN}/helper/ingrainedcut-${__ICUT_VERSION__}.tgz`;
 
 /** Apps people bring with their own plan; the helper's `--connect <app>` adds IngrainedCut to them (server/web.mjs). */
 export const MCP_APPS = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor' } as const;
@@ -14,7 +14,7 @@ export type McpApp = keyof typeof MCP_APPS;
 
 /** The one command that connects the app: on the website it also starts the helper (the desktop app is the editor). */
 export const connectCommand = (app: McpApp) =>
-  `npx -y ${isSite ? location.origin : 'https://www.ingrainedcut.com'}/helper/ingrainedcut-${__ICUT_VERSION__}.tgz --connect ${app}${isSite ? '' : ' --no-helper'}`;
+  `npx -y ${SITE_ORIGIN}/helper/ingrainedcut-${__ICUT_VERSION__}.tgz --connect ${app}${isSite ? '' : ' --no-helper'}`;
 
 /** The app picked last (shared by the AI panel and the Help dialog). */
 export function useMcpApp(initial: McpApp = 'claude') {
@@ -85,7 +85,7 @@ async function localNetworkPermission() {
 function OpenThroughHelper() {
   const project = new URLSearchParams(location.search).get('project') ?? '';
   return (
-    <a className="btn primary sm" href={`/editor/local?project=${encodeURIComponent(project)}`} style={{ display: 'inline-block', margin: '6px 0' }}>
+    <a className="btn primary sm" href={`/editor/local?project=${encodeURIComponent(project)}${HELPER_PORT !== 5310 ? `&port=${HELPER_PORT}` : ''}`} style={{ display: 'inline-block', margin: '6px 0' }}>
       Open the editor through the helper
     </a>
   );

@@ -50,6 +50,8 @@ contextBridge.exposeInMainWorld('icut', {
   providerCancelLogin: () => ipcRenderer.invoke('providers:cancel-login'),
   providerInstall: (p) => ipcRenderer.invoke('providers:install', p),
   engineTool: (name, args) => ipcRenderer.invoke('engine:tool', { name, args }),
+  mcpClients: () => ipcRenderer.invoke('mcp:clients'),
+  mcpConnect: (client) => ipcRenderer.invoke('mcp:connect', client),
   providerModels: (p) => ipcRenderer.invoke('providers:models', p),
   onExternalAgents: on('agents:external'),
   permissionReply: (r) => ipcRenderer.send('agent:permission-reply', r),

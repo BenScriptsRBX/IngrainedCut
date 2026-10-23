@@ -546,3 +546,7 @@ a.logo { text-decoration: none; }
 .pp-offline span { flex: 1; }
 .helper-chip.found { border-color: rgba(59, 178, 107, 0.6); color: #bbf7d0; }
 .helper-chip.found .hc-dot { background: #3bb26b; animation: pulse 1s infinite; }
+/* Help → Use your own Claude Code, Codex or Cursor */
+.mcp-apps { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.mcp-app { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: #1b1b1b; }
+.mcp-app .grow { flex: 1; min-width: 0; }

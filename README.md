@@ -39,7 +39,7 @@ The easiest way to use IngrainedCut is the website: **https://www.ingrainedcut.c
 3. To edit with AI (Claude, Codex or Cursor, with your own account), run the free helper on your computer:
 
    ```bash
-   npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.8.tgz
+   npx -y https://www.ingrainedcut.com/helper/ingrainedcut-0.2.9.tgz
    ```
 
    The exact command for the current version is always on the [setup page](https://www.ingrainedcut.com/download).

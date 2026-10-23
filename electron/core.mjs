@@ -13,6 +13,7 @@ import { CodexAgent, CursorAgent, providerStatus, providerLogin, cancelProviderL
 import { TOOL_DEFS } from './tools.mjs';
 import { startBridge, BRIDGE_FILE } from './bridge.mjs';
 import { claudeSdk } from './runtimePackages.mjs';
+import { mcpClientStatus, connectMcpClient } from './mcpClients.mjs';
 import { mediaUrl } from './mediaServe.mjs';
 import { userDataDir, documentsDir } from './paths.mjs';
 
@@ -407,6 +408,11 @@ export function createCore(host) {
     return s;
   });
 
+  // outside agents (the user's own Claude Code, Codex, Cursor) reach the editor through this MCP server
+  const mcpServerPath = host.mcpServerPath ?? path.join(ROOT, 'mcp', 'server.mjs');
+  handle('mcp:clients', () => mcpClientStatus(mcpServerPath));
+  handle('mcp:connect', (client) => connectMcpClient(client, mcpServerPath));
+
   handle('app:info', async () => {
     let ffmpegOk = true;
     try {
@@ -416,7 +422,7 @@ export function createCore(host) {
     }
     return {
       version: host.version,
-      mcpServerPath: host.mcpServerPath ?? path.join(ROOT, 'mcp', 'server.mjs'),
+      mcpServerPath,
       bridgeFile: BRIDGE_FILE,
       ffmpegOk,
       userData: userDataDir(),

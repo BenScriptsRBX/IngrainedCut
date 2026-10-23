@@ -27,6 +27,31 @@ function CopyCommand() {
   );
 }
 
+/** This site's settings page in the browser (pages can't link to it, so it is copied). */
+function siteSettingsUrl() {
+  const scheme = /Edg\//.test(navigator.userAgent) ? 'edge' : /OPR\//.test(navigator.userAgent) ? 'opera' : 'chrome';
+  return `${scheme}://settings/content/siteDetails?site=${encodeURIComponent(location.origin)}`;
+}
+
+function CopyLine({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="helper-cmd">
+      <code>{text}</code>
+      <button
+        className="btn sm"
+        onClick={async () => {
+          await navigator.clipboard.writeText(text).catch(() => {});
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1600);
+        }}
+      >
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+    </div>
+  );
+}
+
 /** Chrome's permission for public sites to reach this computer (127.0.0.1); null where the browser doesn't have it. */
 async function localNetworkPermission() {
   try {
@@ -52,8 +77,9 @@ function ConnectButton() {
       </button>
       {state === 'blocked' && (
         <div className="hint warn-text">
-          Your browser is blocking this site from reaching the helper on your computer. Click the icon at the left of the address bar → Site settings → Local
-          network access → Allow, then click Connect again.
+          Your browser is blocking this site from reaching the helper on your computer. Paste this into the address bar, set <b>Local network access</b> to{' '}
+          <b>Allow</b>, then come back and click Connect again:
+          <CopyLine text={siteSettingsUrl()} />
         </div>
       )}
       {state === 'missing' && (

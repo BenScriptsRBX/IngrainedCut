@@ -248,6 +248,8 @@ function installWebBridge() {
     providerCancelLogin: () => invoke('providers:cancel-login'),
     providerInstall: (p: string) => invoke('providers:install', p),
     engineTool: (name: string, args: any) => invoke('engine:tool', { name, args }),
+    mcpClients: () => invoke('mcp:clients'),
+    mcpConnect: (client: string) => invoke('mcp:connect', client),
     providerModels: (p: string) => invoke('providers:models', p),
     onExternalAgents: on('agents:external'),
     permissionReply: (r: any) => send('agent:permission-reply', r),

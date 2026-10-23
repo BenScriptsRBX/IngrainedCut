@@ -684,40 +684,79 @@ function claudeCommand(cc: { path?: string; source?: string } | null) {
 /**
  * The way to use a Claude, ChatGPT or Cursor subscription with IngrainedCut: the user runs that company's own app and
  * connects it to IngrainedCut's MCP server, so the subscription is only ever used by its own app. (The chat panel's
- * built-in Claude and Codex run on API keys; see electron/agent.mjs.)
+ * built-in Claude and Codex run on API keys; see electron/agent.mjs.) Connect writes the setting for them
+ * (electron/mcpClients.mjs); the commands below do the same by hand.
  */
 function McpDialog({ onClose }: { onClose: () => void }) {
   const [info, setInfo] = useState<any>(null);
   const [cc, setCc] = useState<{ path?: string; source?: string } | null>(null);
+  const [clients, setClients] = useState<Awaited<ReturnType<typeof window.icut.mcpClients>> | null>(null);
+  const [busy, setBusy] = useState<McpClient | null>(null);
+  const [manual, setManual] = useState(false);
+  const refresh = () => window.icut.mcpClients().then(setClients, () => setClients(null));
   useEffect(() => {
-    window.icut.appInfo().then(setInfo);
+    window.icut.appInfo().then((i) => {
+      setInfo(i);
+      if (i.mcpServerPath) refresh();
+    });
     window.icut.authStatus().then(setCc, () => {});
   }, []);
   const p = info?.mcpServerPath as string | undefined;
   const claudeCmd = p ? `${claudeCommand(cc)} mcp add --scope user ingrainedcut -- node "${p}"` : '';
   const json = p ? JSON.stringify({ mcpServers: { ingrainedcut: { command: 'node', args: [p] } } }, null, 2) : '';
+  const connect = async (c: McpClient) => {
+    setBusy(c);
+    const r = await window.icut.mcpConnect(c);
+    setBusy(null);
+    await refresh();
+    toast(r.ok ? `IngrainedCut added to ${MCP_APPS[c].name}` : `Couldn't add IngrainedCut: ${r.out.slice(-300)}`, r.ok ? 'success' : 'error', r.ok ? 3500 : 9000);
+  };
   return (
     <Modal title="Use your own Claude Code, Codex or Cursor (MCP)" onClose={onClose} width={660}>
       <p>
-        Have a Claude, ChatGPT or Cursor plan? Run their app yourself, on your own plan, and connect it to IngrainedCut once. It gets every editing tool and
+        Have a Claude, ChatGPT or Cursor plan? Connect that app to IngrainedCut once, then use it as usual, on your own plan. It gets every editing tool and
         edits the timeline open here, live{isSite ? ', while the IngrainedCut helper is running' : ''}.
       </p>
-      {!p ? (
+      {!info ? (
+        <p className="dim">Checking…</p>
+      ) : !p ? (
         <p className="warn-text">Connect the IngrainedCut helper first (the chip at the top right), then open this again.</p>
       ) : (
         <>
-          <div className="form-h">Claude Code — run once in {claudeCmd.startsWith('& ') ? 'PowerShell' : 'a terminal'}</div>
-          <CopyBox text={claudeCmd} />
+          <div className="mcp-apps">
+            {(Object.keys(MCP_APPS) as McpClient[]).map((c) => {
+              const st = clients?.[c];
+              return (
+                <div key={c} className="mcp-app">
+                  <div className="grow">
+                    <b>{MCP_APPS[c].name}</b>
+                    <div className="hint">
+                      {!st ? 'Checking…' : st.current ? `✓ Connected — ${MCP_APPS[c].then}` : st.connected ? 'Connected with an older setup — click Update.' : st.installed ? 'Not connected yet.' : MCP_APPS[c].missing}
+                    </div>
+                  </div>
+                  <button className={'btn sm' + (st?.current ? '' : ' primary')} disabled={!st || busy !== null || (c === 'claude' && !st.installed)} onClick={() => connect(c)}>
+                    {busy === c ? 'Connecting…' : st?.current ? 'Reconnect' : st?.connected ? 'Update' : 'Connect'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
           <p className="hint">
-            Then start <code className="mono">claude</code> in any folder (or use Claude Code in the Claude desktop app or your IDE) and ask, for example, “cut
-            the silences in my IngrainedCut timeline”.
+            After connecting, start a <b>new</b> session in that app (one that was already open won’t see IngrainedCut), and ask, for example, “cut the silences
+            in my IngrainedCut timeline”.
           </p>
-          <div className="form-h">Codex — run once in a terminal</div>
-          <CopyBox text={`codex mcp add ingrainedcut -- node "${p}"`} />
-          <p className="hint">Then use Codex as usual (the CLI, the Codex app or the IDE extension).</p>
-          <div className="form-h">Cursor — add to ~/.cursor/mcp.json</div>
-          <CopyBox text={json} pre />
-          <p className="hint">The Cursor app and the cursor-agent CLI both read this file. Other MCP apps take the same entry.</p>
+          <a onClick={() => setManual(!manual)}>{manual ? 'Hide the manual setup' : 'Set it up by hand instead'}</a>
+          {manual && (
+            <>
+              <div className="form-h">Claude Code — run once in {claudeCmd.startsWith('& ') ? 'PowerShell' : 'a terminal'}</div>
+              <CopyBox text={claudeCmd} />
+              <div className="form-h">Codex — run once in a terminal</div>
+              <CopyBox text={`codex mcp add ingrainedcut -- node "${p}"`} />
+              <div className="form-h">Cursor — add to ~/.cursor/mcp.json</div>
+              <CopyBox text={json} pre />
+              <p className="hint">Other MCP apps take the same entry.</p>
+            </>
+          )}
         </>
       )}
       <p className="hint">
@@ -727,6 +766,16 @@ function McpDialog({ onClose }: { onClose: () => void }) {
     </Modal>
   );
 }
+
+const MCP_APPS: Record<McpClient, { name: string; then: string; missing: string }> = {
+  claude: {
+    name: 'Claude Code',
+    then: 'use it in the Claude desktop app (Code), your IDE or the claude command.',
+    missing: 'Claude Code isn’t installed. Install the Claude desktop app (or Claude Code), then check again.',
+  },
+  codex: { name: 'Codex', then: 'use the Codex app, IDE extension or CLI.', missing: 'Codex wasn’t found, but you can connect now — it’s ready once you install Codex.' },
+  cursor: { name: 'Cursor', then: 'use the Cursor app or cursor-agent.', missing: 'Cursor wasn’t found, but you can connect now — it’s ready once you install Cursor.' },
+};
 
 function AboutDialog({ onClose }: { onClose: () => void }) {
   return (

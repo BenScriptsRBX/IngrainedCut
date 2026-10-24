@@ -192,6 +192,7 @@ export function ChatPanel() {
               {name} sees your whole timeline — every clip, track, effect and the playhead — with each message, and edits it live through the IngrainedCut
               tools. Every change lands in the timeline and in Undo history.
             </p>
+            {provider === 'relay' && <p className="plan-note">Runs in your own {name}, on your own plan: usage counts toward your {name} subscription.</p>}
             <HelperUpdateNotice />
             <AuthCallout />
             <div className="suggestions">
@@ -654,9 +655,12 @@ function RelaySetup() {
   // the helper is already running (its command connected the app), so all that's left is starting a session
   const [app] = useMcpApp();
   return (
-    <div>
-      Open a {MCP_APPS[app]} session and say <b>connect to IngrainedCut</b>. Then type here.
-    </div>
+    <>
+      <div>
+        Open a {MCP_APPS[app]} session and say <b>connect to IngrainedCut</b>. Then type here.
+      </div>
+      <div className="hint">It runs on your own {MCP_APPS[app]} plan — IngrainedCut doesn’t provide or pay for the AI.</div>
+    </>
   );
 }
 

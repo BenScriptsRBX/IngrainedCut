@@ -49,6 +49,11 @@ export default function Terms() {
           them. We do not control, and are not responsible for, third-party services or their outputs.
         </p>
         <p>
+          If you connect your own Claude Code, Codex or Cursor (“your own app”), the AI runs in that app on your own plan: its usage counts toward your
+          subscription with that provider, and you are responsible for using it within that provider’s terms. {SITE.name} does not provide, resell or pay for
+          that AI.
+        </p>
+        <p>
           AI output can be wrong or unexpected. Review edits before you rely on or publish them. Editing actions can be undone; actions outside the editor (for
           example, shell commands) ask for your permission unless you turn on “Bypass permissions”, which you do at your own risk.
         </p>

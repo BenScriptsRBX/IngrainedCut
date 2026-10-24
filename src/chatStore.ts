@@ -50,7 +50,7 @@ export const PROVIDERS: { id: Provider; name: string; short: string; desc: strin
   { id: 'claude', name: 'Claude', short: 'Claude', desc: 'Anthropic Claude with your Claude account or API key' },
   { id: 'codex', name: 'Codex', short: 'Codex', desc: 'OpenAI Codex with your ChatGPT account or OpenAI API key' },
   { id: 'cursor', name: 'Cursor', short: 'Cursor', desc: 'Cursor Agent with your Cursor account' },
-  { id: 'relay', name: 'Your own app', short: 'Your app', desc: 'Your own Claude Code, Codex or Cursor session, on your own plan, taking prompts from here' },
+  { id: 'relay', name: 'Your own plan', short: 'Your app', desc: 'Your own Claude Code, Codex or Cursor session, running on your own subscription, taking prompts from here' },
 ];
 
 /** settings keys holding each provider's model and effort (Cursor has no effort setting) */

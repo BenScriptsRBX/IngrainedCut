@@ -60,6 +60,15 @@ export default function Privacy() {
               <td>Contract</td>
             </tr>
             <tr>
+              <td>
+                Helper sign-in: when you open the editor through the helper, a token that lets the helper on your computer reach your account — we store only a
+                one-way hash of it, which account it belongs to and when it was last used (it stops working after 30 days without use)
+              </td>
+              <td>The helper on your computer</td>
+              <td>Load and save your projects in the editor the helper opens</td>
+              <td>Contract</td>
+            </tr>
+            <tr>
               <td>Ko-fi payments: transaction ID, payer email, amount, currency, payment type and date, and the code from your Ko-fi message (the rest of the message is not stored)</td>
               <td>Ko-fi, when you support us</td>
               <td>Turn off ads in the editor for your account</td>
@@ -88,8 +97,17 @@ export default function Privacy() {
         <p>
           When you use an AI feature, the helper on your computer sends your prompt, a text description of your timeline (which can include media file names and
           paths, clip timings and any title or caption text) and, if you choose, frames from your edit or transcripts of your media, to the provider you selected —
-          Anthropic (Claude), OpenAI (Codex) or Anysphere (Cursor) — using your own account with them. They process that data under their own terms and privacy
-          policies, not ours.
+          Anthropic (Claude), OpenAI (Codex) or Anysphere (Cursor) — using your own account or API key with them. They process that data under their own terms and
+          privacy policies, not ours. API keys you enter are stored only on your computer.
+        </p>
+        <p>
+          If you connect your own Claude Code, Codex or Cursor (“your own app”), what you type in the editor’s chat panel goes from the helper on your computer to
+          that app, which sends it to its provider under your account and plan. These messages, and the app’s replies, stay on your computer and never pass
+          through our servers.
+        </p>
+        <p>
+          When you open the editor through the helper, the helper keeps its sign-in token in a file on your computer (<code>.ingrainedcut/cloud.json</code> in
+          your home folder) and uses it to load and save your projects with us, as the website does.
         </p>
 
         <h2>4. Cookies and advertising</h2>

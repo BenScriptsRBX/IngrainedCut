@@ -97,8 +97,16 @@ export function revealInFolder(p) {
 }
 
 export function openUrl(url) {
-  if (!/^https?:\/\//.test(url)) return;
-  if (process.platform === 'win32') spawn('cmd.exe', ['/c', 'start', '""', url.replace(/&/g, '^&')], { detached: true, windowsHide: true }).unref();
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return;
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return;
+  url = u.href;
+  // not through cmd.exe, which would treat characters like | or > in the link as commands
+  if (process.platform === 'win32') spawn('rundll32.exe', ['url.dll,FileProtocolHandler', url], { detached: true, windowsHide: true }).unref();
   else if (process.platform === 'darwin') spawn('open', [url], { detached: true }).unref();
   else spawn('xdg-open', [url], { detached: true }).unref();
 }

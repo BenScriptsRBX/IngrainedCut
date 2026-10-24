@@ -4,7 +4,7 @@ import { exchangeHelperCode } from '@/lib/helperLink';
 
 export async function POST(req: Request) {
   const { code } = await req.json().catch(() => ({}));
-  const token = typeof code === 'string' && code.startsWith('icutc_') ? await exchangeHelperCode(code) : null;
-  if (!token) return NextResponse.json({ error: 'This link has expired. Open the project again from the website.' }, { status: 400 });
-  return NextResponse.json({ token }, { headers: { 'Cache-Control': 'no-store' } });
+  const link = typeof code === 'string' && code.startsWith('icutc_') ? await exchangeHelperCode(code) : null;
+  if (!link) return NextResponse.json({ error: 'This link has expired. Open the project again from the website.' }, { status: 400 });
+  return NextResponse.json(link, { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -12,7 +12,7 @@ export const SITE = {
   privacyEmail: 'ingrainedcut@proton.me',
   governingLaw: 'the State of Arizona, United States',
   minimumAge: 13,
-  legalUpdated: 'October 22, 2026',
+  legalUpdated: 'October 24, 2026',
   /** Google AdSense publisher ID (ADSENSE_CLIENT overrides it; forks should use their own). */
   adsenseClient: 'ca-pub-5183770861913918',
   /** Where the helper's default allowed origin points; must match the deployed domain. */

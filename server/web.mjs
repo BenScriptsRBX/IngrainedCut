@@ -129,19 +129,30 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/cloud/open') {
     const site = url.searchParams.get('site') || '';
     if (!SITE_ORIGINS.has(site)) return send(res, 400, 'Unknown website');
+    let link;
     try {
       const r = await fetch(`${site}/api/helper/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: url.searchParams.get('code') }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.token) return send(res, 400, j.error || `Could not open the project (HTTP ${r.status})`);
-      cloud = { site, token: j.token };
-      fs.mkdirSync(path.dirname(CLOUD_FILE), { recursive: true });
-      fs.writeFileSync(CLOUD_FILE, JSON.stringify(cloud), { mode: 0o600 });
+      link = { site, token: j.token, email: j.email || '', project: url.searchParams.get('project') || '' };
     } catch (e) {
       return send(res, 502, `Could not reach ${site}: ${e.message}`);
     }
-    // Lax, not Strict: this response ends a navigation that started on the website
-    res.writeHead(302, { 'Set-Cookie': `${COOKIE}=${TOKEN}; HttpOnly; SameSite=Lax; Path=/`, Location: `/editor/?project=${encodeURIComponent(url.searchParams.get('project') || '')}` });
-    return res.end();
+    // A link from someone else could hand this helper their account (so your edits would land there): switching to a
+    // different account than the one already in use here needs a click on a page only this helper can show.
+    if (cloud?.email && link.email && cloud.email !== link.email) {
+      const nonce = crypto.randomBytes(16).toString('hex');
+      pendingLinks.set(nonce, link);
+      setTimeout(() => pendingLinks.delete(nonce), 5 * 60 * 1000).unref();
+      return send(res, 200, switchAccountPage(cloud.email, link, nonce), { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    }
+    return useLink(res, link);
+  }
+  if (url.pathname === '/cloud/confirm') {
+    const link = pendingLinks.get(url.searchParams.get('n') || '');
+    pendingLinks.delete(url.searchParams.get('n') || '');
+    if (!link) return send(res, 400, 'This link has expired. Open the project again from the website.');
+    return useLink(res, link);
   }
 
   if (url.pathname.startsWith('/api/')) {
@@ -182,6 +193,26 @@ const server = http.createServer(async (req, res) => {
   if (underEditor && file.endsWith('index.html')) return res.end(viaHelperHtml(fs.readFileSync(file, 'utf8')));
   fs.createReadStream(file).pipe(res);
 });
+
+// ---------- "Open through the helper": the website account this helper uses ----------
+const pendingLinks = new Map(); // nonce → link waiting for the user to confirm an account switch
+
+function useLink(res, link) {
+  cloud = { site: link.site, token: link.token, email: link.email };
+  fs.mkdirSync(path.dirname(CLOUD_FILE), { recursive: true });
+  fs.writeFileSync(CLOUD_FILE, JSON.stringify(cloud), { mode: 0o600 });
+  // Lax, not Strict: this response ends a navigation that started on the website
+  res.writeHead(302, { 'Set-Cookie': `${COOKIE}=${TOKEN}; HttpOnly; SameSite=Lax; Path=/`, Location: `/editor/?project=${encodeURIComponent(link.project)}` });
+  res.end();
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const switchAccountPage = (current, link, nonce) => `<!doctype html><meta charset="utf-8"><title>Switch account? · IngrainedCut</title>
+<body style="background:#161616;color:#ddd;font:15px Segoe UI,sans-serif;display:grid;place-items:center;height:100vh;margin:0">
+<div style="max-width:460px;line-height:1.6"><h2>Open IngrainedCut as ${esc(link.email)}?</h2>
+<p>This computer's IngrainedCut is signed in as <b>${esc(current)}</b>. Only continue if <b>${esc(link.email)}</b> is your account too — your edits will be saved there.</p>
+<p><a href="/cloud/confirm?n=${nonce}" style="background:#2d8ceb;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none">Continue as ${esc(link.email)}</a>
+&nbsp; <a href="${esc(link.site)}/projects" style="color:#9ab">Cancel</a></p></div></body>`;
 
 /** Tells the editor it was served by this helper (src/webBridge.ts). */
 const viaHelperHtml = (html) => html.replace('<head>', '<head><script>window.__ICUT_VIA_HELPER__ = true</script>');

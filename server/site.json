@@ -1,5 +1,5 @@
 {
-  "comment": "Websites allowed to use this helper (the editor on these origins can connect). ingrainedcut.vercel.app now redirects to www.ingrainedcut.com.",
-  "origins": ["https://www.ingrainedcut.com", "https://ingrainedcut.com", "https://ingrainedcut.vercel.app", "http://localhost:3000"],
+  "comment": "Websites allowed to use this helper (the editor on these origins can connect). ingrainedcut.vercel.app redirects to www.ingrainedcut.com. For local development of the website, start the helper with ICUT_SITE_ORIGINS=http://localhost:3000.",
+  "origins": ["https://www.ingrainedcut.com", "https://ingrainedcut.com", "https://ingrainedcut.vercel.app"],
   "openUrl": "https://www.ingrainedcut.com/projects"
 }

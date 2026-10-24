@@ -20,14 +20,15 @@ export async function createHelperCode(userId: string) {
   return code;
 }
 
-/** Trade a code (once) for a token; null if it is unknown or expired. */
+/** Trade a code (once) for a token and the account's email (the helper asks before switching accounts); null if unknown or expired. */
 export async function exchangeHelperCode(code: string) {
   const db = await getDb();
   const row = await db.deleteFrom('helper_code').where('code_hash', '=', hash(code)).returning(['user_id', 'expires_at']).executeTakeFirst();
   if (!row || row.expires_at.getTime() < Date.now()) return null;
+  const user = await db.selectFrom('user').select('email').where('id', '=', row.user_id).executeTakeFirst();
   const token = random('icut_');
   await db.insertInto('helper_token').values({ token_hash: hash(token), user_id: row.user_id }).execute();
-  return token;
+  return { token, email: user?.email ?? '' };
 }
 
 /** The user a helper token belongs to (tokens unused for 30 days expire). */

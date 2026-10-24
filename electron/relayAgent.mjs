@@ -34,7 +34,10 @@ export class RelayAgent {
   send({ text, context, images = [] }) {
     const parts = [text];
     if (images.length) parts.push(`(The user attached ${images.length} frame${images.length === 1 ? '' : 's'} from the program monitor; use capture_frame to see it.)`);
-    if (context) parts.push(context);
+    // only the timeline's headline, not the whole snapshot: the session's context then grows by the conversation, not by a
+    // copy of the timeline per message (it calls get_project_state when it needs the details)
+    const headline = context?.match(/^Sequence .*$/m)?.[0];
+    if (headline) parts.push(`(Timeline: ${headline.replace(/^Sequence /, '')}. Call get_project_state for clips and details.)`);
     this.queue.push(parts.join('\n\n'));
     this.emit({ type: 'busy' });
     if (!this.status().ready) this.emit({ type: 'status', status: 'Waiting for your app — open it and say “connect to IngrainedCut”' });

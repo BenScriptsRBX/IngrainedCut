@@ -67,8 +67,18 @@ if (outside) {
         "Wait for the user's next message in IngrainedCut's chat panel and return it (with a snapshot of the timeline). Use it when the user asks you to connect to IngrainedCut: loop wait_for_prompt → edit with the IngrainedCut tools → send_reply → wait_for_prompt. If it returns no message, call it again right away.",
       inputSchema: { timeout_seconds: z.number().min(5).max(240).optional().describe('How long to wait before returning empty (default: as long as this app allows)') },
     },
-    // Claude Code waits for slow tools; Codex and others give up after about a minute
-    async (args) => call('wait_for_prompt', { timeout_seconds: args?.timeout_seconds ?? (/claude/i.test(clientName()) ? 240 : 50) }),
+    async (args) => {
+      // Codex and others give up on a tool after about a minute, so they get an empty answer and call again
+      if (args?.timeout_seconds || !/claude/i.test(clientName())) return call('wait_for_prompt', { timeout_seconds: args?.timeout_seconds ?? 50 });
+      // Claude Code waits for slow tools, so keep waiting here until a message arrives: no model turns (and no usage)
+      // while the user isn't typing, also across helper restarts
+      for (;;) {
+        const res = await call('wait_for_prompt', { timeout_seconds: 240 });
+        const text = res?.content?.[0]?.text ?? '';
+        if (res?.isError) await new Promise((r) => setTimeout(r, 5000));
+        else if (!text.startsWith('No new message yet')) return res;
+      }
+    },
   );
   server.registerTool(
     'send_reply',

@@ -5,7 +5,7 @@ import { Icon } from './Icons';
 import { runExport, cancelExport, BROWSER_FORMATS, type ExportOptions } from '../exporter';
 import { isBrowserEngine, isSite } from '../webBridge';
 import { SyncDialog, SilenceDialog } from './EditDialogs';
-import { AppPicker, MCP_APPS, connectCommand, useMcpApp } from './HelperConnect';
+import { AppPicker, MCP_APPS, NodeLink, connectCommand, useMcpApp } from './HelperConnect';
 import { sequenceDuration, setClipSpeed } from '../ops';
 import { fmtTC } from '../time';
 import { MODELS, EFFORTS, setModel, useChat } from '../chatStore';
@@ -688,7 +688,7 @@ function McpDialog({ onClose }: { onClose: () => void }) {
       <div className="form-h">2. Run this in a terminal</div>
       <CopyBox text={cmd} />
       <p className="hint">
-        Command Prompt, PowerShell or Terminal all work (it needs Node.js 22+).
+        Command Prompt, PowerShell or Terminal all work (it needs <NodeLink />, free).
         {isSite ? ' It also starts the IngrainedCut helper, so leave that window open while you edit.' : ''}
       </p>
       <div className="form-h">3. Use {MCP_APPS[app]}</div>

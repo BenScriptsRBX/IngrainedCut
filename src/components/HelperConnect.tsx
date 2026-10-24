@@ -48,6 +48,24 @@ export function AppPicker({ app, onChange }: { app: McpApp; onChange: (a: McpApp
   );
 }
 
+/** "Node.js 22+" as a link to the download page (the helper command runs on Node). */
+export function NodeLink() {
+  const url = 'https://nodejs.org/en/download';
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => {
+        e.preventDefault();
+        window.icut.openExternal(url);
+      }}
+    >
+      Node.js 22+
+    </a>
+  );
+}
+
 export function CopyLine({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -121,7 +139,7 @@ function Steps() {
   return (
     <ol className="helper-steps">
       <li>
-        Open a terminal and run (needs Node.js 22+):
+        Open a terminal and run (needs <NodeLink />, free):
         <CopyLine text={HELPER_COMMAND} />
       </li>
       <li>Keep it running and click Connect — after the first time, this page connects by itself. Your browser may ask to allow access to your local network — choose Allow.</li>
@@ -155,7 +173,7 @@ export function HelperNeeded() {
       <h3>Edit with AI</h3>
       <ol className="helper-steps">
         <li>
-          Run this in a terminal, and leave it open:
+          Run this in a terminal (needs <NodeLink />, free), and leave it open:
           <CopyLine text={connectCommand(app)} />
         </li>
         <li>
@@ -166,7 +184,7 @@ export function HelperNeeded() {
         </li>
       </ol>
       <p className="hint">
-        Using <AppPicker app={app} onChange={setApp} /> · needs Node.js 22+
+        Using <AppPicker app={app} onChange={setApp} />
       </p>
     </div>
   );

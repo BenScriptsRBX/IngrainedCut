@@ -56,7 +56,16 @@ export const PROVIDERS: { id: Provider; name: string; short: string; desc: strin
 /** settings keys holding each provider's model and effort (Cursor has no effort setting) */
 const MODEL_KEYS: Record<Provider, [string, string | null]> = { claude: ['model', 'effort'], codex: ['codexModel', 'codexEffort'], cursor: ['cursorModel', null], relay: ['relayModel', null] };
 
-export const agentName = (p: Provider = useChat.getState().provider) => PROVIDERS.find((x) => x.id === p)?.short ?? 'Claude';
+/** "Your own app" goes by the app the user picked (HelperConnect.tsx useMcpApp), Claude Code unless they chose another. */
+function relayAppName() {
+  try {
+    return ({ codex: 'Codex', cursor: 'Cursor' } as Record<string, string>)[localStorage.getItem('icut-mcp-app') ?? ''] ?? 'Claude Code';
+  } catch {
+    return 'Claude Code';
+  }
+}
+
+export const agentName = (p: Provider = useChat.getState().provider) => (p === 'relay' ? relayAppName() : PROVIDERS.find((x) => x.id === p)?.short ?? 'Claude');
 
 interface ChatState {
   provider: Provider;
@@ -139,7 +148,7 @@ export const EFFORTS = [
 ];
 
 export function modelLabel(id: string, provider: Provider = C().provider) {
-  if (provider === 'relay') return 'Your own app';
+  if (provider === 'relay') return relayAppName();
   if (provider === 'claude') return MODELS.find((m) => m.id === id)?.label ?? id;
   if (!id) return provider === 'cursor' ? 'Auto' : 'Default model';
   return C().catalog[provider]?.find((m) => m.id === id)?.label ?? id;

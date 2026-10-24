@@ -167,16 +167,40 @@ const server = http.createServer(async (req, res) => {
   // the account editor lives under /editor (like on the website); the local-mode editor at /
   const underEditor = /^\/editor(\/|$)/.test(url.pathname);
   const rel = underEditor ? url.pathname.slice('/editor'.length) || '/' : url.pathname;
+  // the account editor comes from the website, so it is always the current one; the copy bundled here is the fallback
+  if (underEditor && cloud) {
+    const f = await siteEditorFile(rel);
+    if (f) {
+      res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': 'no-cache' });
+      return res.end(/text\/html/.test(f.type) ? viaHelperHtml(f.body.toString('utf8')) : f.body);
+    }
+  }
   let file = path.normalize(path.join(DIST, decodeURIComponent(rel)));
   if (!file.startsWith(DIST)) return send(res, 403, 'Forbidden');
   if (rel === '/' || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, 'index.html');
   res.writeHead(200, { 'Content-Type': STATIC_TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-  if (underEditor && file.endsWith('index.html')) {
-    // tells the editor it was served by this helper (src/webBridge.ts)
-    return res.end(fs.readFileSync(file, 'utf8').replace('<head>', '<head><script>window.__ICUT_VIA_HELPER__ = true</script>'));
-  }
+  if (underEditor && file.endsWith('index.html')) return res.end(viaHelperHtml(fs.readFileSync(file, 'utf8')));
   fs.createReadStream(file).pipe(res);
 });
+
+/** Tells the editor it was served by this helper (src/webBridge.ts). */
+const viaHelperHtml = (html) => html.replace('<head>', '<head><script>window.__ICUT_VIA_HELPER__ = true</script>');
+
+// the website's editor files (assets have hashed names, so they are kept once loaded)
+const editorCache = new Map();
+async function siteEditorFile(rel) {
+  const key = rel === '/' || !/\.\w+$/.test(rel) ? '/index.html' : rel;
+  if (editorCache.has(key)) return editorCache.get(key);
+  try {
+    const r = await fetch(`${cloud.site}/editor${key}`, { signal: AbortSignal.timeout(8000), redirect: 'error' });
+    if (!r.ok) return null;
+    const f = { type: r.headers.get('content-type') || STATIC_TYPES[path.extname(key)] || 'application/octet-stream', body: Buffer.from(await r.arrayBuffer()) };
+    if (key.startsWith('/assets/')) editorCache.set(key, f);
+    return f;
+  } catch {
+    return null;
+  }
+}
 
 // ---------- WebSocket: the same channels the Electron preload exposes ----------
 const wss = new WebSocketServer({ noServer: true, maxPayload: 512 * 1024 * 1024 });

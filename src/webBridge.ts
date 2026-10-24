@@ -19,6 +19,17 @@ export const HELPER_ORIGIN = isSite && !viaHelper ? `http://127.0.0.1:${HELPER_P
 
 const MEDIA_PREFIX = 'icut://media/';
 let mediaToken = '';
+let connectedVersion = '';
+
+/** True when the connected helper is older than this editor (the website updates first; the helper needs a restart). */
+export function helperOutdated() {
+  if (!isSite || !connectedVersion) return false;
+  const n = (v: string) => v.split('.').map((x) => parseInt(x, 10) || 0);
+  const [a, b] = [n(connectedVersion), n(__ICUT_VERSION__)];
+  for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) < (b[i] ?? 0);
+  return false;
+}
+export const helperVersion = () => connectedVersion;
 
 /** Which engine the website editor runs on: the helper on this computer, or the page itself. */
 export type EngineMode = 'helper' | 'browser';
@@ -148,6 +159,7 @@ function installWebBridge() {
       const msg = JSON.parse(e.data as string);
       if (msg.t === 'hello') {
         mediaToken = msg.mediaToken || '';
+        connectedVersion = msg.version || '';
         everConnected = true;
         helloWaiters.forEach((f) => f());
         helloWaiters = [];

@@ -10,4 +10,6 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ['/projects/:path*', '/editor/:path*', '/editor', '/account'] };
+// /editor/assets and /editor/index.html stay public: they are the open-source editor app, and the helper loads them to
+// serve the editor from the user's computer ("Open through the helper"); the editor's data still needs sign-in (/api)
+export const config = { matcher: ['/projects/:path*', '/editor', '/editor/local', '/account'] };

@@ -8,7 +8,7 @@ import { sequenceDuration } from '../ops';
 import { fmtTC } from '../time';
 import { Icon } from './Icons';
 import { ProviderAuth } from './Dialogs';
-import { HelperNeeded, MCP_APPS, useMcpApp } from './HelperConnect';
+import { HelperNeeded, HelperUpdateNotice, MCP_APPS, useMcpApp } from './HelperConnect';
 import { isBrowserEngine } from '../webBridge';
 
 const SUGGESTIONS = [
@@ -192,6 +192,7 @@ export function ChatPanel() {
               {name} sees your whole timeline — every clip, track, effect and the playhead — with each message, and edits it live through the IngrainedCut
               tools. Every change lands in the timeline and in Undo history.
             </p>
+            <HelperUpdateNotice />
             <AuthCallout />
             <div className="suggestions">
               {SUGGESTIONS.map((s) => (

@@ -1,7 +1,7 @@
 // Website editor: the optional helper. Without it everything but the AI agents (and a few FFmpeg formats) runs in
 // the browser; these explain what it adds and connect to it.
 import React, { useEffect, useRef, useState } from 'react';
-import { HELPER_PORT, SITE_ORIGIN, connectHelper, engineMode, helperReachable, helperWasUsed, isSite } from '../webBridge';
+import { HELPER_PORT, SITE_ORIGIN, connectHelper, engineMode, helperOutdated, helperReachable, helperVersion, helperWasUsed, isSite } from '../webBridge';
 import { S, toast } from '../store';
 import { Icon } from './Icons';
 
@@ -126,6 +126,21 @@ function Steps() {
       </li>
       <li>Keep it running and click Connect — after the first time, this page connects by itself. Your browser may ask to allow access to your local network — choose Allow.</li>
     </ol>
+  );
+}
+
+/** The helper on this computer is older than the website: one line to update it. */
+export function HelperUpdateNotice() {
+  const [app] = useMcpApp();
+  if (!helperOutdated()) return null;
+  return (
+    <div className="auth-callout">
+      <b>Update the helper</b>
+      <div className="hint">
+        It's on version {helperVersion()}. Stop it (Ctrl+C in its window) and run:
+      </div>
+      <CopyLine text={connectCommand(app)} />
+    </div>
   );
 }
 

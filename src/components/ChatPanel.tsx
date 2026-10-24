@@ -8,7 +8,7 @@ import { sequenceDuration } from '../ops';
 import { fmtTC } from '../time';
 import { Icon } from './Icons';
 import { ProviderAuth } from './Dialogs';
-import { AppPicker, CopyLine, HelperNeeded, MCP_APPS, connectCommand, useMcpApp } from './HelperConnect';
+import { HelperNeeded, MCP_APPS, useMcpApp } from './HelperConnect';
 import { isBrowserEngine } from '../webBridge';
 
 const SUGGESTIONS = [
@@ -650,17 +650,12 @@ function PastChats() {
 
 /** "Your own app": connect a Claude Code, Codex or Cursor session the user runs, so it takes its prompts from this panel. */
 function RelaySetup() {
-  const [app, setApp] = useMcpApp();
+  // the helper is already running (its command connected the app), so all that's left is starting a session
+  const [app] = useMcpApp();
   return (
-    <>
-      <div>
-        In {MCP_APPS[app]}, say <b>connect to IngrainedCut</b>. Then type here.
-      </div>
-      <div className="hint">
-        First time? Run this once: <CopyLine text={connectCommand(app)} />
-        Using <AppPicker app={app} onChange={setApp} />
-      </div>
-    </>
+    <div>
+      Open a {MCP_APPS[app]} session and say <b>connect to IngrainedCut</b>. Then type here.
+    </div>
   );
 }
 
@@ -668,7 +663,6 @@ function AuthCallout() {
   const provider = useChat((s) => s.provider);
   const [ready, setReady] = useState(true);
   useEffect(() => void window.icut.providerStatus(provider).then((s) => setReady(s.ready), () => setReady(true)), [provider]);
-  const [app, setApp] = useMcpApp(provider === 'codex' || provider === 'cursor' ? provider : 'claude');
   // your own app connects (or drops) while the panel is open
   useEffect(() => window.icut.onRelayStatus((st) => provider === 'relay' && setReady(st.ready)), [provider]);
   if (ready) return null;
@@ -686,16 +680,14 @@ function AuthCallout() {
         <ProviderAuth provider={provider} compact />
       </div>
     );
-  // the built-in Claude / Codex chat runs on an API key; a plan works through the user's own app, connected with one command
+  // the built-in Claude / Codex chat runs on an API key; without one, messages go to the user's own app
   return (
     <div className="auth-callout">
-      <b>Use your own {MCP_APPS[app]}</b>
-      <div className="hint">Have a Claude, ChatGPT or Cursor plan? Pick your app and run this once in a terminal:</div>
-      <AppPicker app={app} onChange={setApp} />
-      <CopyLine text={connectCommand(app)} />
-      <div className="hint">Then open a new {MCP_APPS[app]} session and ask it to edit your IngrainedCut timeline.</div>
+      <b>Almost there</b>
+      <RelaySetup />
       <div className="hint">
-        Or chat right here: add your own {provider === 'codex' ? 'OpenAI' : 'Anthropic'} API key in <a onClick={() => setS({ dialog: 'settings' })}>Settings</a>.
+        Or add your own {provider === 'codex' ? 'OpenAI' : 'Anthropic'} API key in <a onClick={() => setS({ dialog: 'settings' })}>Settings</a> to use the
+        built-in chat.
       </div>
     </div>
   );

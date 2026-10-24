@@ -20,16 +20,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: '#09090b' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const adsense = adsenseClient();
+  // No ad code on the website's pages: the editor loads AdSense itself, only when it shows an ad (src/components/AdBar.tsx).
+  // The meta tag above and /ads.txt are what AdSense needs to verify the site.
   return (
     <html lang="en" className={inter.variable}>
-      {/* AdSense's own tag (a plain script: AdSense rejects next/script's data-nscript attribute). Ads only run where the
-          editor places a unit, as long as Auto ads stay off in AdSense. */}
-      {adsense && (
-        <head>
-          <script async src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsense}`} crossOrigin="anonymous" />
-        </head>
-      )}
       <body>{children}</body>
     </html>
   );

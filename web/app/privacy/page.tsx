@@ -54,6 +54,12 @@ export default function Privacy() {
               <td>Contract; legitimate interests (security)</td>
             </tr>
             <tr>
+              <td>Hosting logs: IP address, browser user agent, the pages and API requests made, their results and timestamps</td>
+              <td>Your browser, recorded by our host (Vercel)</td>
+              <td>Keep the Service secure and running, and fix problems</td>
+              <td>Legitimate interests (security, reliability)</td>
+            </tr>
+            <tr>
               <td>Project data you save: project names, timeline structure, clip timings, effects, titles and captions text, and the file names and folder paths of media on your computer</td>
               <td>You</td>
               <td>Save and reopen your projects</td>
@@ -123,8 +129,8 @@ export default function Privacy() {
             adssettings.google.com
           </a>
           . In the EEA, the UK and Switzerland we ask for your consent before personalised ads are shown. Ads appear only in the editor, never on your exported
-          videos, and you can remove them for good by supporting IngrainedCut on Ko-fi (see your <Link href="/account#ad-free">account page</Link>). We do not use
-          analytics cookies.
+          videos, and you can remove them for good by supporting IngrainedCut on Ko-fi (see your <Link href="/account#ad-free">account page</Link>). Google’s ad
+          code is loaded only in the editor, not on the rest of the website. We do not use analytics cookies.
         </p>
 
         <h2>5. Who we share data with</h2>
@@ -147,7 +153,7 @@ export default function Privacy() {
         <h2>7. Retention</h2>
         <p>
           We keep your account and saved projects while your account is active. Deleted projects are removed from our database immediately and drop out of our
-          database backups within 7 days. Session records expire after 30 days. When you delete your account we delete your account data and projects immediately (and from backups within 7 days).
+          database backups within 7 days. Session records expire after 30 days. Hosting logs are kept by our host for a short period (days) and then deleted. When you delete your account we delete your account data and projects immediately (and from backups within 7 days).
           Ko-fi payment records are kept as financial records for 7 years; deleting your account unlinks them from it.
         </p>
 

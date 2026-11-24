@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Project } from './types';
-import { S, commit, toast } from './store';
+import { S, commit, toast, getAutosaveKey } from './store';
 import { contextBlock } from './claudeTools';
 import { engine } from './engine';
 
@@ -10,7 +10,7 @@ export type ChatItem =
   | { kind: 'tool'; id: string; name: string; input: any; status: 'running' | 'done' | 'error'; result?: string; images?: number }
   | { kind: 'permission'; id: string; reqId: number; toolName: string; input: any; status: 'pending' | 'allowed' | 'denied' }
   | { kind: 'error'; id: string; text: string }
-  | { kind: 'result'; id: string; ok: boolean; cost?: number; durationMs?: number; edits: number; snapshot: Project; error?: string }
+  | { kind: 'result'; id: string; ok: boolean; cost?: number; durationMs?: number; edits: number; snapshot?: Project; error?: string }
   | { kind: 'note'; id: string; text: string };
 
 export interface AgentRun {
@@ -92,6 +92,9 @@ interface ChatState {
   externals: ExternalAgent[];
   attached: AttachedChat[];
   continuing: { sessionId: string; title: string } | null;
+  /** the agent session behind this chat (resumed when its project is opened again) */
+  sessionId: string | null;
+  sessionCwd: string | null;
 }
 
 export const useChat = create<ChatState>()(() => ({
@@ -105,6 +108,8 @@ export const useChat = create<ChatState>()(() => ({
   externals: [],
   attached: [],
   continuing: null,
+  sessionId: null,
+  sessionCwd: null,
   items: [],
   busy: false,
   thinking: false,
@@ -130,9 +135,10 @@ const nid = () => `i${++seq}`;
 
 export const MODELS: { id: string; label: string; desc: string; older?: boolean }[] = [
   { id: 'claude-opus-5-5', label: 'Opus 5.5', desc: 'Recommended. Strong reasoning at a good speed for editing.' },
-  { id: 'claude-fable-5-1', label: 'Fable 5.1', desc: 'Most capable. Best for big, open-ended edits; slower and pricier.' },
+  { id: 'claude-fable-5-2', label: 'Fable 5.2', desc: 'Most capable. Best for big, open-ended edits; slower and pricier.' },
   { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', desc: 'Fast and capable. Great for everyday edits.' },
   { id: 'claude-haiku-5-5', label: 'Haiku 5.5', desc: 'Fastest and cheapest. Good for quick, simple changes.' },
+  { id: 'claude-fable-5-1', label: 'Fable 5.1', desc: 'Previous Fable.', older: true },
   { id: 'claude-opus-5', label: 'Opus 5', desc: 'Previous Opus.', older: true },
   { id: 'claude-sonnet-5', label: 'Sonnet 5', desc: 'Previous Sonnet.', older: true },
   { id: 'claude-opus-4-8', label: 'Opus 4.8', desc: 'Older Opus.', older: true },
@@ -149,14 +155,22 @@ export const EFFORTS = [
 
 export function modelLabel(id: string, provider: Provider = C().provider) {
   if (provider === 'relay') return relayAppName();
-  if (provider === 'claude') return MODELS.find((m) => m.id === id)?.label ?? id;
+  if (provider === 'claude') return claudeModel(id)?.label ?? MODELS.find((m) => m.id === id)?.label ?? id;
   if (!id) return provider === 'cursor' ? 'Auto' : 'Default model';
   return C().catalog[provider]?.find((m) => m.id === id)?.label ?? id;
 }
 
+/** Claude Code's own list row for a model id: exact, or the alias row that resolves to it ("opus" ↔ claude-opus-5-5) */
+export function claudeModel(id: string) {
+  const list = C().catalog.claude ?? [];
+  return list.find((m) => m.id === id) ?? list.find((m) => m.resolved === id && m.id !== 'default');
+}
+
 export async function loadCatalog(p: Provider) {
-  if (p === 'claude' || p === 'relay' || C().catalog[p]?.length) return;
+  // Claude's list comes from Claude Code itself and is refreshed every time (it changes as Claude Code updates)
+  if (p === 'relay' || (p !== 'claude' && C().catalog[p]?.length)) return;
   const list = await window.icut.providerModels(p).catch(() => []);
+  if (p === 'claude' && !list.length) return; // keep the built-in list (or the last good one)
   setC((s) => ({ catalog: { ...s.catalog, [p]: list } }));
 }
 
@@ -171,7 +185,7 @@ export async function setProvider(p: Provider) {
   if (p === C().provider) return;
   if (C().busy) return toast(`Wait for ${agentName()} to finish, or press Stop first`, 'info');
   applyProviderSettings(await window.icut.agentSetProvider(p));
-  setC({ items: [], agents: {}, turnStart: null, attached: [], continuing: null, info: null, openAssistant: null });
+  setC({ items: [], agents: {}, turnStart: null, attached: [], continuing: null, info: null, openAssistant: null, sessionId: null, sessionCwd: null });
   push({ kind: 'note', id: nid(), text: `Now chatting with ${PROVIDERS.find((x) => x.id === p)!.name}. It sees your timeline and edits it with the same IngrainedCut tools.` });
   loadCatalog(p);
 }
@@ -209,6 +223,7 @@ export async function sendMessage(text: string) {
   if (!t) return;
   const s = C();
   const frame = s.attachFrame ? await grabFrame() : null;
+  dropTurn = false; // a new message: whatever arrives now belongs to this chat
   push({ kind: 'user', id: nid(), text: t, frame: frame || undefined });
   if (!s.busy) setC({ turnStart: { snapshot: S().project, historyLen: S().past.length } });
   setC((st) => ({ busy: true, thinking: true, openAssistant: null, busySince: st.busySince ?? Date.now() }));
@@ -229,7 +244,7 @@ export function stop() {
 
 export function newChat() {
   window.icut.agentReset();
-  setC({ items: [], busy: false, thinking: false, openAssistant: null, turnStart: null, agents: {}, continuing: null });
+  setC({ items: [], busy: false, thinking: false, openAssistant: null, turnStart: null, agents: {}, continuing: null, sessionId: null, sessionCwd: null });
 }
 
 export function setModel(model: string, effort = C().effort) {
@@ -265,7 +280,7 @@ export async function continueChat(sessionId: string, title: string) {
   if (C().busy) return toast(`Wait for ${agentName()} to finish, or press Stop first`, 'info');
   await window.icut.sessionContinue(sessionId);
   if (C().provider !== 'claude') applyProviderSettings(await window.icut.getSettings());
-  setC({ items: [], agents: {}, turnStart: null, attached: [], continuing: { sessionId, title } });
+  setC({ items: [], agents: {}, turnStart: null, attached: [], continuing: { sessionId, title }, sessionId: null, sessionCwd: null });
   push({ kind: 'note', id: nid(), text: `Continuing your Claude Code chat "${title}" (on a copy — the original is untouched). Claude has its full history plus your timeline.` });
 }
 
@@ -291,15 +306,85 @@ export function runningAgents() {
   return Object.values(C().agents).filter((a) => a.status === 'running' || a.status === 'pending');
 }
 
+// ---------- one chat per project ----------
+// Each project keeps its own chat: switching projects saves this one and brings back the other's (its messages, and
+// the agent continues the same session, so it remembers the conversation).
+let owner: { path: string | null; key: string } = { path: null, key: '' };
+let dropTurn = false;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+function chatRecord() {
+  const s = C();
+  // keep files small: no timeline snapshots or attached frames, long tool output trimmed, unfinished items closed
+  const items = s.items.slice(-400).map((i): ChatItem => {
+    if (i.kind === 'result') return { ...i, snapshot: undefined };
+    if (i.kind === 'user') return { ...i, frame: undefined };
+    if (i.kind === 'tool') return { ...i, status: i.status === 'running' ? 'done' : i.status, result: i.result?.slice(0, 2000) };
+    if (i.kind === 'permission' && i.status === 'pending') return { ...i, status: 'denied' };
+    return i;
+  });
+  return { provider: s.provider, sessionId: s.sessionId, cwd: s.sessionCwd, items, totalCost: s.totalCost };
+}
+
+async function saveChat() {
+  clearTimeout(saveTimer);
+  if (!owner.key && !owner.path) return;
+  const s = C();
+  if (!s.items.length && !s.sessionId) return;
+  await window.icut.chatSave({ path: owner.path, key: owner.key, chat: chatRecord() }).catch(() => {});
+}
+
+/** A different project was opened: save this chat, then show (and resume) that project's chat. */
+export async function switchProjectChat(path: string | null, key: string) {
+  if (owner.path === path && owner.key === key) return;
+  if (C().busy) {
+    dropTurn = true;
+    window.icut.agentInterrupt();
+  }
+  await saveChat();
+  owner = { path, key };
+  const rec = await window.icut.chatLoad({ path, key }).catch(() => null);
+  const fresh = { agents: {}, turnStart: null, attached: [], continuing: null, openAssistant: null, busy: false, thinking: false, busySince: null, statusNote: null };
+  if (rec?.items?.length || rec?.sessionId) {
+    const st = rec.sessionId ? await window.icut.chatResume({ provider: rec.provider, sessionId: rec.sessionId, cwd: rec.cwd }).catch(() => null) : null;
+    if (st) applyProviderSettings(st);
+    else window.icut.agentReset();
+    setC({ ...fresh, items: rec.items ?? [], sessionId: rec.sessionId ?? null, sessionCwd: rec.cwd ?? null, totalCost: rec.totalCost ?? 0 });
+  } else {
+    window.icut.agentReset();
+    setC({ ...fresh, items: [], sessionId: null, sessionCwd: null, totalCost: 0 });
+  }
+}
+
+/** The open project was saved to a (new) file: its chat moves along with it. */
+export function setChatProjectPath(path: string | null) {
+  if (owner.path === path) return;
+  owner = { ...owner, path };
+  saveChat();
+}
+
 export function installChatBridge() {
+  owner = { path: null, key: getAutosaveKey() };
+  // save the chat shortly after it changes (and right after each turn)
+  useChat.subscribe((st, prev) => {
+    if (st.items === prev.items && st.sessionId === prev.sessionId) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveChat, st.busy ? 4000 : 600);
+  });
   window.icut.getSettings().then((st) => {
     applyProviderSettings(st);
     setC({ bypass: !!st.autoApproveAll, multiAgent: st.multiAgent !== false });
     loadCatalog(C().provider);
   });
   window.icut.onExternalAgents((list) => setC({ externals: list }));
+  window.icut.onClaudeModels?.((list) => setC((s) => ({ catalog: { ...s.catalog, claude: list } })));
   return window.icut.onAgentEvent((ev) => {
     const s = C();
+    if (dropTurn) {
+      // the rest of a turn stopped when its project was closed: it belongs to that project's chat, not this one
+      if (ev.type === 'result' || ev.type === 'idle') dropTurn = false;
+      return;
+    }
     switch (ev.type) {
       case 'busy':
         setC((st) => ({ busy: true, busySince: st.busySince ?? Date.now() }));
@@ -314,6 +399,7 @@ export function installChatBridge() {
         break;
       case 'init':
         setC({ info: { model: ev.model, mcpStatus: ev.mcpStatus, apiKeySource: ev.apiKeySource, version: ev.version } });
+        if (ev.sessionId) setC({ sessionId: ev.sessionId, sessionCwd: ev.cwd ?? null });
         break;
       case 'thinking':
         setC({ thinking: true });

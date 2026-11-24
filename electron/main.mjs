@@ -18,6 +18,13 @@ protocol.registerSchemesAsPrivileged([
 
 let win = null;
 let core = null;
+let closeConfirmed = false;
+ipcMain.on('app:close-after-save', (_e, saved) => {
+  if (!saved || !win) return;
+  closeConfirmed = true;
+  win.close();
+});
+
 
 function registerMediaProtocol() {
   protocol.handle('icut', async (req) => {
@@ -52,16 +59,26 @@ function createWindow() {
   if (dev) win.loadURL(dev);
   else win.loadFile(path.join(ROOT, 'dist', 'index.html'));
   win.on('close', (e) => {
-    if (!core?.isDirty()) return;
+    if (closeConfirmed || !core?.isDirty()) return;
+    e.preventDefault();
     const r = dialog.showMessageBoxSync(win, {
       type: 'warning',
-      buttons: ['Quit without saving', 'Cancel'],
-      defaultId: 1,
-      cancelId: 1,
-      message: 'You have unsaved changes.',
-      detail: 'Quit IngrainedCut anyway?',
+      buttons: ['Save', "Don't Save", 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+      message: `Save changes to "${core.projectName()}" before closing?`,
+      detail: "If you don't save, your latest changes are still kept as an autosave you can reopen from the start page.",
     });
-    if (r === 1) e.preventDefault();
+    if (r === 2) return;
+    if (r === 1) {
+      core.autosaveNow();
+      closeConfirmed = true;
+      win.close();
+      return;
+    }
+    // Save: the editor saves (asking where, for a new project) and reports back; closing waits for it
+    win.webContents.send('app:save-and-close');
   });
   win.on('closed', () => (win = null));
 }

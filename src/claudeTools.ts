@@ -785,7 +785,22 @@ export async function runTool(name: string, a: any): Promise<CallToolResult> {
       return txt({ clip: c.id, exposure: c.grade?.exposure ?? 0, whites: c.grade?.whites ?? 0, blacks: c.grade?.blacks ?? 0, temperature: c.fx.temperature, tint: c.fx.tint });
     }
     case 'export_video': {
-      const r = await runExport({ path: a.path, format: a.format, quality: a.quality, range: a.range, scale: a.scale });
+      const seq = S().project.settings;
+      const r = await runExport({
+        path: a.path,
+        format: a.format,
+        quality: a.quality,
+        range: a.range,
+        scale: a.height ? a.height / seq.height : a.scale,
+        fps: a.fps,
+        bitrate: a.bitrate_mbps ? a.bitrate_mbps * 1e6 : undefined,
+        encoder: a.encoder,
+        proresProfile: a.prores_profile,
+        dnxhrProfile: a.dnxhr_profile,
+        audioBitrate: a.audio_kbps,
+        sampleRate: a.sample_rate,
+        bitDepth: a.bit_depth,
+      });
       return txt({ exported: r.path, size_mb: r3(r.size / 1e6), render_seconds: r3(r.seconds), encoder: r.engine });
     }
     case 'save_project': {

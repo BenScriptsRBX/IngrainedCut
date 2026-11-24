@@ -102,6 +102,7 @@ export function menubar(): { label: string; items: MenuItem[] }[] {
               { label: 'Save a Copy to This Computer…', shortcut: 'Ctrl+Shift+S', action: () => saveProject(true) },
             ]
           : [
+              { label: 'Start Page…', action: () => setS({ startPage: true }) },
               { label: 'New Project', shortcut: 'Ctrl+Alt+N', action: newProjectAction },
               { label: 'Open Project…', shortcut: 'Ctrl+O', action: () => openProject() },
               { label: 'Save', shortcut: 'Ctrl+S', action: () => saveProject() },

@@ -65,8 +65,8 @@ export default function DownloadPage() {
               <td>Codex</td>
               <td>Included with the helper</td>
               <td>
-                Built-in chat: add an OpenAI API key in Settings. Have a ChatGPT plan? Install Codex yourself and connect it the same way (Help → Use your own
-                Claude Code, Codex or Cursor).
+                Built-in chat: pick Codex in the AI panel and click <b>Continue with ChatGPT</b> to use your ChatGPT plan (Plus or Pro), or add an OpenAI API key
+                in Settings.
               </td>
             </tr>
             <tr>
@@ -78,7 +78,7 @@ export default function DownloadPage() {
             </tr>
           </tbody>
         </table>
-        <p>Choose the agent from the model button at the top of the AI panel in the editor. Cursor keeps its tool settings in a <code className="inline">.cursor/mcp.json</code> inside your project folder. AI usage is billed by that provider: API prices for the built-in Claude and Codex chat, or your own plan when you connect your own app.</p>
+        <p>Choose the agent from the model button at the top of the AI panel in the editor. Cursor keeps its tool settings in a <code className="inline">.cursor/mcp.json</code> inside your project folder. AI usage is billed by that provider: your ChatGPT plan when you continue with ChatGPT, API prices for the built-in chat on an API key, or your own plan when you connect your own app.</p>
 
         <h2>Troubleshooting</h2>
         <ul>

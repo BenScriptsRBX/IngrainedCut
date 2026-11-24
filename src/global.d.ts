@@ -5,11 +5,41 @@ type Unsub = () => void;
 declare global {
   /** package.json version, injected by Vite */
   const __ICUT_VERSION__: string;
+  interface ProjectSummary {
+    name: string;
+    clips: number;
+    media: number;
+    duration: number;
+  }
+  interface AutosaveVersion extends Partial<ProjectSummary> {
+    file: string;
+    time: number;
+    /** auto: saved while editing; replaced: the project file as it was just before a Save wrote over it */
+    kind: 'auto' | 'replaced';
+  }
+  interface AutosaveEntry {
+    key: string;
+    name: string;
+    /** the project's own file (null: never saved) */
+    path: string | null;
+    latest: number;
+    fileExists: boolean;
+    fileTime: number | null;
+    /** clips in the project's own file now (null: no file) */
+    fileClips: number | null;
+    versions: AutosaveVersion[];
+  }
+  interface StartInfo {
+    recent: ({ path: string; time: number } & Partial<ProjectSummary>)[];
+    autosaves: AutosaveEntry[];
+  }
   interface ProviderStatus {
     installed: boolean;
     loggedIn: boolean;
     apiKey: boolean;
     ready: boolean;
+    /** Codex: Sign in with ChatGPT (plan: the ChatGPT plan may be used here) */
+    chatgpt?: { signedIn: boolean; email: string | null; plan: boolean; welcomeSeen: boolean };
     method?: string;
     email?: string;
     install?: string;
@@ -21,6 +51,8 @@ declare global {
     desc?: string;
     efforts?: string[];
     defaultEffort?: string;
+    /** the full model id an alias row stands for (Claude: "opus" → "claude-opus-5-5") */
+    resolved?: string;
   }
 }
 
@@ -43,13 +75,21 @@ declare global {
       loadProject(path: string): Promise<{ data: any; missing: string[] }>;
       syncProject(p: any): void;
       setDirty(d: boolean): void;
+      startInfo(): Promise<StartInfo>;
+      peekProject(p: string): Promise<ProjectSummary | null>;
+      loadAutosave(file: string): Promise<{ data: any; missing: string[] }>;
+      onSaveAndClose(cb: () => void): Unsub;
+      closeAfterSave(saved: boolean): void;
+      chatSave(o: { path: string | null; key: string; chat: any }): Promise<boolean>;
+      chatLoad(o: { path: string | null; key: string }): Promise<any | null>;
+      chatResume(o: { provider: string; sessionId: string | null; cwd: string | null }): Promise<any | null>;
       exportStart(o: any): Promise<{ audioOnly: boolean }>;
       exportFrame(buf: ArrayBuffer): Promise<void>;
       exportFinish(): Promise<{ path: string; size: number }>;
       exportCancel(): Promise<void>;
       exportWcStart(o: { ext: 'mp4' | 'webm' }): Promise<{ tmp: string }>;
       exportWcChunk(o: { position: number; data: Uint8Array }): Promise<void>;
-      exportWcFinish(o: { outPath: string; audio: ArrayBuffer | null; format: string }): Promise<{ path: string; size: number }>;
+      exportWcFinish(o: { outPath: string; audio: ArrayBuffer | null; format: string; [k: string]: any }): Promise<{ path: string; size: number }>;
       exportWcCancel(): Promise<void>;
       agentSend(p: { text: string; context?: string; images?: { mediaType: string; data: string }[] }): Promise<void>;
       agentInterrupt(): Promise<void>;
@@ -62,8 +102,11 @@ declare global {
       agentSetProvider(p: 'claude' | 'codex' | 'cursor' | 'relay'): Promise<any>;
       providerStatus(p: 'claude' | 'codex' | 'cursor' | 'relay'): Promise<ProviderStatus>;
       onRelayStatus(cb: (st: ProviderStatus) => void): Unsub;
+      onClaudeModels(cb: (list: ProviderModel[]) => void): Unsub;
       providerLogin(p: 'claude' | 'codex' | 'cursor'): Promise<{ ok: boolean; out: string }>;
       providerCancelLogin(): Promise<void>;
+      chatgptSignOut(): Promise<any>;
+      chatgptWelcomeSeen(): Promise<void>;
       providerInstall(p: 'codex'): Promise<{ ok: boolean; out: string }>;
       engineTool(name: 'detect_scenes' | 'detect_silence' | 'transcribe' | 'analyze_loudness', args: any): Promise<{ content: any[]; isError?: boolean }>;
       providerModels(p: 'claude' | 'codex' | 'cursor'): Promise<ProviderModel[]>;

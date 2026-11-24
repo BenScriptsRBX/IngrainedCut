@@ -80,14 +80,17 @@ never reveal file paths. The desktop app and the browser version share settings 
 ### Connect an AI agent
 
 Pick the agent from the model button at the top of the chat panel: **Claude**, **Codex** or **Cursor**.
-The built-in Claude and Codex chats run on the user's own **API key** (Anthropic doesn't allow apps built on the Agent
-SDK to use a Claude subscription, and a ChatGPT plan is meant for OpenAI's own Codex apps). People who pay for a plan
-run their own Claude Code or Codex instead and connect it over MCP (below). Cursor uses the user's own Cursor account.
+The built-in Claude chat runs on the user's own Anthropic **API key** (Anthropic doesn't allow apps built on the Agent
+SDK to use a Claude subscription); Claude subscribers run their own Claude Code and connect it over MCP (below). The
+built-in Codex chat runs on the user's **ChatGPT plan** through OpenAI's
+[Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source) for open-source apps
+(**Continue with ChatGPT**, `electron/chatgptAuth.mjs`), or on an OpenAI API key. Cursor uses the user's own Cursor account.
 
 - **Claude** — runs on the user's **own Claude Code** (`electron/claudeCode.mjs` finds it: `ICUT_CLAUDE_PATH`, `claude`
   on PATH, the copy inside the Claude desktop app, or `~/.local/bin`), with their skills and settings, on the
   Anthropic API key from Settings. Model (Opus 5.5 by default) and effort are in the same menu.
-- **Codex** — installs on first use (`@openai/codex-sdk`, ~450 MB) and runs on the OpenAI API key from Settings. The model list and reasoning levels come from the Codex CLI's own catalog. By
+- **Codex** — installs on first use (`@openai/codex-sdk`, ~450 MB) and runs on the user's ChatGPT plan (Continue with ChatGPT: OAuth with PKCE in the
+  browser, tokens kept on the user's computer and sent only to OpenAI) or on the OpenAI API key from Settings. The model list and reasoning levels come from the Codex CLI's own catalog. By
   default Codex's shell is sandboxed to the project folder; **Bypass permissions** gives it full access.
 - **Cursor** — install the Cursor CLI (`irm 'https://cursor.com/install?win32=true' | iex` on Windows,
   `curl https://cursor.com/install -fsS | bash` elsewhere), then **Sign in to Cursor** or add a Cursor API key. IngrainedCut

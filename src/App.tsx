@@ -19,6 +19,7 @@ import { ContextMenuHost } from './components/ContextMenu';
 import { isSite, isBrowserEngine } from './webBridge';
 import { HelperChip } from './components/HelperConnect';
 import { AdBar } from './components/AdBar';
+import { StartPage } from './components/StartPage';
 
 function usePersisted(key: string, initial: number): [number, (v: number) => void] {
   const [v, setV] = useState<number>(() => {
@@ -94,6 +95,9 @@ function TopBar() {
           <span>Ic</span>
         </div>
       )}
+      <span className="app-version" title={`IngrainedCut version ${__ICUT_VERSION__}`}>
+        v{__ICUT_VERSION__}
+      </span>
       <div className="menubar">
         {menus.map((m, i) => (
           <div key={m.label} className={'menubar-item' + (open === i ? ' open' : '')} onMouseDown={() => setOpen(open === i ? null : i)} onMouseEnter={() => open != null && setOpen(i)}>
@@ -254,6 +258,7 @@ export function App() {
       </div>
       <AdBar />
       <StatusBar />
+      <StartPage />
       <Dialogs />
       <ContextMenuHost />
     </div>

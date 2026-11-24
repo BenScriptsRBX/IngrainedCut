@@ -241,11 +241,35 @@ export function Timeline() {
     if (e.button !== 0) return;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     drag.current = { type: 'scrub', x0: e.clientX, y0: e.clientY };
+    scrubPtr.current = { clientX: e.clientX, shiftKey: e.shiftKey };
     scrubTo(e);
+    requestAnimationFrame(scrubEdgeScroll);
   };
 
-  const scrubTo = (e: React.PointerEvent | PointerEvent) => {
-    let t = Math.max(0, timeAt(e.clientX));
+  // dragging the playhead past either edge of the lanes scrolls the timeline that way (faster the further out), and the
+  // playhead stays at the edge while it scrolls, never over the track headers
+  const scrubPtr = useRef<{ clientX: number; shiftKey: boolean } | null>(null);
+  const laneBounds = () => {
+    const r = ref.current!.getBoundingClientRect();
+    return { left: r.left + HEADER_W, right: r.left + ref.current!.clientWidth - 1 };
+  };
+  const scrubEdgeScroll = () => {
+    const el = ref.current;
+    const p = scrubPtr.current;
+    if (!el || !p || drag.current?.type !== 'scrub') return;
+    const { left, right } = laneBounds();
+    const over = p.clientX < left ? p.clientX - left : p.clientX > right ? p.clientX - right : 0;
+    if (over) {
+      const before = el.scrollLeft;
+      el.scrollLeft = Math.max(0, before + Math.sign(over) * Math.min(48, 4 + Math.abs(over) * 0.6));
+      if (el.scrollLeft !== before) scrubTo(p);
+    }
+    requestAnimationFrame(scrubEdgeScroll);
+  };
+
+  const scrubTo = (e: { clientX: number; shiftKey: boolean }) => {
+    const { left, right } = laneBounds();
+    let t = Math.max(0, timeAt(Math.min(Math.max(e.clientX, left), right)));
     if (e.shiftKey || S().snapping) {
       const sn = snapT([t], snapPoints(new Set()).filter((p) => p !== S().playhead), e.shiftKey);
       if (sn.at != null && (e.shiftKey || Math.abs(sn.delta) * S().zoom < 5)) t = sn.at;
@@ -266,6 +290,7 @@ export function Timeline() {
         ref.current!.scrollLeft = d.scroll0! - dx;
         return;
       case 'scrub':
+        scrubPtr.current = { clientX: e.clientX, shiftKey: e.shiftKey };
         return scrubTo(e);
       case 'marquee': {
         const r = ref.current!.getBoundingClientRect();
@@ -628,7 +653,7 @@ export function Timeline() {
               />
             ),
           )}
-          <PlayheadLine height={contentH} />
+          <PlayheadLine height={contentH} scrollX={scrollX} viewW={viewW} />
           {snapLine != null && <div className="tl-snapline" style={{ left: playheadPx + snapLine * zoom, height: contentH }} />}
           {marquee && <div className="tl-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />}
         </div>
@@ -774,15 +799,21 @@ const Ruler = memo(function Ruler({ project, zoom, scrollX, viewW, onDown }: { p
   return <canvas ref={ref} className="tl-ruler" style={{ left: HEADER_W + scrollX, width: w, height: RULER_H }} onPointerDown={onDown} />;
 });
 
+// scrolled past the playhead, the head slides under the ruler's corner (styles.css stacking)
 function PlayheadHead() {
   const ph = useEditor((s) => s.playhead);
   const zoom = useEditor((s) => s.zoom);
   return <div className="tl-ph-head" style={{ left: HEADER_W + ph * zoom }} />;
 }
-function PlayheadLine({ height }: { height: number }) {
+// the line is clipped to the lanes (a window over the visible lanes), so it never shows over the track headers
+function PlayheadLine({ height, scrollX, viewW }: { height: number; scrollX: number; viewW: number }) {
   const ph = useEditor((s) => s.playhead);
   const zoom = useEditor((s) => s.zoom);
-  return <div className="tl-ph-line" style={{ left: HEADER_W + ph * zoom, height: height - RULER_H }} />;
+  return (
+    <div className="tl-ph-clip" style={{ left: HEADER_W + scrollX, width: Math.max(0, viewW - HEADER_W), height: height - RULER_H }}>
+      <div className="tl-ph-line" style={{ left: ph * zoom - scrollX }} />
+    </div>
+  );
 }
 
 interface RowProps {

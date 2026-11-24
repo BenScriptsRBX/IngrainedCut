@@ -10,12 +10,14 @@ import { getSettings, saveSettings, addRecentProject } from './settings.mjs';
 import { AgentManager } from './agent.mjs';
 import { findClaudeCode, CLAUDE_CODE_INSTALL } from './claudeCode.mjs';
 import { RelayAgent } from './relayAgent.mjs';
-import { CodexAgent, CursorAgent, providerStatus, providerLogin, cancelProviderLogin, providerModels, installCodex } from './otherAgents.mjs';
+import { CodexAgent, CursorAgent, providerStatus, providerLogin, cancelProviderLogin, providerModels, installCodex, clearModelCache, codexOutdated } from './otherAgents.mjs';
 import { TOOL_DEFS } from './tools.mjs';
 import { startBridge, BRIDGE_FILE } from './bridge.mjs';
 import { claudeSdk } from './runtimePackages.mjs';
 import { mediaUrl } from './mediaServe.mjs';
 import { userDataDir, documentsDir } from './paths.mjs';
+import { keyFor, hasContent, writeSnapshot, listAutosaves, summarize, isAutosaveFile } from './autosave.mjs';
+import * as chatgpt from './chatgptAuth.mjs';
 
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -369,7 +371,7 @@ export function createCore(host) {
   const provider = () => (agents[getSettings().provider] ? getSettings().provider : 'claude');
   // The built-in Claude / Codex chat runs on an API key. Without one, the panel talks to the user's own app instead
   // (relayAgent.mjs), so typing a message never ends in "add an API key".
-  const needsKey = (p, s = getSettings()) => (p === 'claude' && !s.apiKey) || (p === 'codex' && !s.openaiApiKey);
+  const needsKey = (p, s = getSettings()) => (p === 'claude' && !s.apiKey) || (p === 'codex' && !s.openaiApiKey && !chatgpt.planReady());
   if (needsKey(provider())) saveSettings({ provider: 'relay' });
   const active = () => agents[provider()];
   /** settings keys holding each provider's model and effort */
@@ -414,9 +416,56 @@ export function createCore(host) {
     return getSettings();
   });
   handle('providers:status', (p) => (p === 'claude' ? claudeStatus() : p === 'relay' ? agents.relay.status() : providerStatus(p, getSettings())));
-  handle('providers:models', (p) => (p === 'claude' || p === 'relay' ? [] : providerModels(p)));
+  handle('providers:models', (p) => (p === 'claude' ? claudeModels() : p === 'relay' ? [] : providerModels(p)));
+  /**
+   * The quick Claude Code runs (sign-in status, model list) go one at a time: two Claude Code processes starting together
+   * can both renew an expired sign-in, and the renewal that loses can leave Claude Code signed out.
+   */
+  let claudeQueue = Promise.resolve();
+  const oneClaudeAtATime = (fn) => {
+    const run = claudeQueue.then(fn, fn);
+    claudeQueue = run.catch(() => {});
+    return run;
+  };
+  /** Claude Code's current model list; the last good list is kept in settings and returned at once while a fresh one loads */
+  const MODELS_EVERY = 30 * 60_000;
+  let modelsRefresh = null;
+  let modelsAt = 0;
+  function refreshClaudeModels() {
+    if (modelsRefresh) return modelsRefresh;
+    modelsAt = Date.now();
+    modelsRefresh = oneClaudeAtATime(() => agents.claude.models())
+      .then((list) => {
+        if (list.length) saveSettings({ claudeModels: list });
+        return list;
+      })
+      .finally(() => (modelsRefresh = null));
+    return modelsRefresh;
+  }
+  async function claudeModels() {
+    const cached = getSettings().claudeModels;
+    if (cached?.length) {
+      if (Date.now() - modelsAt > MODELS_EVERY) refreshClaudeModels().then((list) => list.length && emit('models:claude', list));
+      return cached;
+    }
+    return refreshClaudeModels();
+  }
+  // a fresh list at every start (Claude Code updates itself, and new models appear in its list)
+  setTimeout(() => refreshClaudeModels().then((list) => list.length && emit('models:claude', list)).catch(() => {}), 3000);
   handle('providers:login', async (p) => {
     if (p === 'claude') return { ok: false, out: SIGN_IN_THERE };
+    // Codex: Sign in with ChatGPT (IngrainedCut's own registration with OpenAI; the chat then runs on the user's plan)
+    if (p === 'codex') {
+      try {
+        const r = await chatgpt.signIn((url) => host.shell.openExternal(url));
+        clearModelCache('codex');
+        agents.codex.reset();
+        if (r.plan && provider() === 'relay') saveSettings({ provider: 'codex' });
+        return r;
+      } catch (e) {
+        return { ok: false, out: e.message };
+      }
+    }
     const r = await providerLogin(p, (line) => {
       emit('auth:output', line);
       const url = line.match(/https:\/\/\S+/);
@@ -425,12 +474,23 @@ export function createCore(host) {
     agents[p].reset();
     return r;
   });
+  // an older Codex in the app data folder updates itself in the background (newer models come with newer Codex)
+  setTimeout(() => {
+    if (codexOutdated()) installCodex(() => {}).then((r) => r.ok && clearModelCache('codex')).catch(() => {});
+  }, 15000);
   handle('providers:install', async (p) => {
     if (p !== 'codex') throw new Error('Only Codex installs from here');
     return installCodex((line) => emit('auth:output', line));
   });
+  handle('chatgpt:sign-out', async () => {
+    const st = await chatgpt.signOut();
+    clearModelCache('codex');
+    agents.codex.reset();
+    return st;
+  });
+  handle('chatgpt:welcome-seen', () => chatgpt.markWelcomeSeen());
   handle('providers:cancel-login', () => {
-    authProc?.kill();
+    chatgpt.cancelSignIn();
     cancelProviderLogin();
   });
 
@@ -512,8 +572,22 @@ export function createCore(host) {
   handle('media:refresh-assets', ({ id, path: p, info }) => processMediaAssets(id, p, info));
 
   handle('project:save', async ({ path: p, data }) => {
-    fs.writeFileSync(p, JSON.stringify(data, null, 1));
+    const text = JSON.stringify(data, null, 1);
+    // the file being replaced is kept first (start page → versions), so a save over the wrong project can be undone
+    try {
+      if (fs.existsSync(p)) {
+        const old = fs.readFileSync(p, 'utf8');
+        if (old !== text) {
+          const prev = JSON.parse(old);
+          if (hasContent(prev)) writeSnapshot(keyFor(p), { ...prev, path: p }, 'replaced');
+        }
+      }
+    } catch (e) {
+      console.error('backup before save', e.message);
+    }
+    fs.writeFileSync(p, text);
     addRecentProject(p);
+    lastAutosave = '';
     return true;
   });
   handle('project:load', async (p) => {
@@ -524,6 +598,73 @@ export function createCore(host) {
   });
   on('project:sync', (p) => (mirror = p));
   on('project:dirty', (d) => (dirty = d));
+
+  // ---------- autosave + start page ----------
+  let lastAutosave = '';
+  /** Snapshot the open project when it has unsaved changes (and changed since the last snapshot). */
+  function autosaveNow() {
+    if (!mirror || !dirty || !hasContent(mirror)) return;
+    const text = JSON.stringify(mirror);
+    if (text === lastAutosave) return;
+    try {
+      writeSnapshot(keyFor(mirror.path) ?? mirror._autosaveKey, mirror, 'auto');
+      lastAutosave = text;
+    } catch (e) {
+      console.error('autosave', e.message);
+    }
+  }
+  const autosaveTimer = setInterval(autosaveNow, 20000);
+  handle('projects:start', async () => {
+    const recent = getSettings()
+      .recentProjects.filter((p) => fs.existsSync(p))
+      .map((p) => ({ path: p, time: fs.statSync(p).mtimeMs, ...summarize(p) }));
+    return { recent, autosaves: listAutosaves() };
+  });
+  handle('project:peek', (p) => (p && fs.existsSync(p) ? summarize(p) : null));
+
+  // ---------- one chat per project ----------
+  // chats/<key>.json: the panel's messages plus the agent session to resume (key as for autosaves: the project file's
+  // path, or the per-session id of a project that was never saved)
+  const chatFile = ({ path: p, key }) => {
+    const k = String(keyFor(p) ?? key ?? '').replace(/[^\w-]/g, '');
+    return k ? path.join(userDataDir(), 'chats', k + '.json') : null;
+  };
+  handle('chat:save', ({ path: p, key, chat }) => {
+    const f = chatFile({ path: p, key });
+    if (!f) return false;
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, JSON.stringify({ ...chat, savedAt: Date.now() }));
+    return true;
+  });
+  handle('chat:load', ({ path: p, key }) => {
+    const f = chatFile({ path: p, key });
+    try {
+      return f && fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null;
+    } catch {
+      return null;
+    }
+  });
+  /** Pick a project's chat back up: its agent continues the same session (with its full memory). */
+  handle('chat:resume', ({ provider: p, sessionId, cwd }) => {
+    const a = agents[p];
+    if (!a) return null;
+    if (provider() !== p) {
+      active().reset();
+      saveSettings({ provider: p });
+    }
+    if (p === 'claude') a.resumeFrom(sessionId, cwd && fs.existsSync(cwd) ? cwd : agentCwd());
+    else {
+      a.reset();
+      if (sessionId && 'session' in a) a.session = sessionId;
+    }
+    return getSettings();
+  });
+  handle('autosave:load', async (file) => {
+    if (!isAutosaveFile(file)) throw new Error('Not an autosave');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const missing = (data.media || []).filter((m) => !fs.existsSync(m.path)).map((m) => m.path);
+    return { data, missing };
+  });
 
   handle('export:start', (opts) => {
     const audioWav = opts.audio ? writeTempWav(opts.audio) : null;
@@ -598,7 +739,7 @@ export function createCore(host) {
     const s = getSettings();
     const cc = findClaudeCode();
     if (!cc) return { installed: false, loggedIn: false, apiKey: !!s.apiKey, ready: false, install: CLAUDE_CODE_INSTALL };
-    const r = await runClaude(cc, ['auth', 'status']);
+    const r = await oneClaudeAtATime(() => runClaude(cc, ['auth', 'status']));
     let st = { loggedIn: false };
     try {
       st = JSON.parse(r.out.slice(r.out.indexOf('{')));
@@ -614,7 +755,11 @@ export function createCore(host) {
 
   return {
     isDirty: () => dirty,
+    projectName: () => mirror?.name ?? 'Untitled Project',
+    autosaveNow,
     shutdown() {
+      autosaveNow();
+      clearInterval(autosaveTimer);
       for (const a of Object.values(agents)) a.reset();
       cancelProviderLogin();
       bridge.close();

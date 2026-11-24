@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  useChat, sendMessage, stop, newChat, setModel, answerPermission, revertTurn, MODELS, EFFORTS, modelLabel, setDraft, setBypass, setMultiAgent,
+  useChat, sendMessage, stop, newChat, setModel, answerPermission, revertTurn, MODELS, EFFORTS, modelLabel, claudeModel, setDraft, setBypass, setMultiAgent,
   attachChat, detachChat, continueChat, type ChatItem, PROVIDERS, setProvider, agentName, loadCatalog, type Provider,
 } from '../chatStore';
 import { useEditor, setS } from '../store';
 import { sequenceDuration } from '../ops';
 import { fmtTC } from '../time';
 import { Icon } from './Icons';
-import { ProviderAuth } from './Dialogs';
+import { AuthBox, ProviderAuth } from './Dialogs';
 import { HelperNeeded, HelperUpdateNotice, MCP_APPS, useMcpApp } from './HelperConnect';
 import { isBrowserEngine } from '../webBridge';
 
@@ -165,6 +165,7 @@ export function ChatPanel() {
         <AgentsIndicator />
         <span className="grow" />
         <ModelPicker model={model} effort={effort} provider={provider} />
+        {provider === 'codex' && <PlanBadge />}
         <PastChats />
         <button className="icon-btn" title="New conversation" onClick={newChat}>
           <Icon name="newchat" size={15} />
@@ -207,6 +208,8 @@ export function ChatPanel() {
         {items.map((it) => (
           <ChatRow key={it.id} item={it} />
         ))}
+        {/* after a switch to an AI that isn't set up yet (the chat already has its note): its sign-in, right here */}
+        {items.length > 0 && <AuthCallout />}
         <ActivityLine name={name} />
       </div>
 
@@ -292,6 +295,20 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
   const multiAgent = useChat((s) => s.multiAgent);
   const catalog = useChat((s) => s.catalog[provider]);
   const ref = useRef<HTMLDivElement>(null);
+  // the menu is fixed to the window (not the panel), kept on screen however narrow the panel is
+  const [pos, setPos] = useState<React.CSSProperties>({});
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = ref.current?.getBoundingClientRect();
+      if (!r) return;
+      const w = Math.min(320, window.innerWidth - 16);
+      setPos({ position: 'fixed', width: w, top: r.bottom + 4, left: Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)), right: 'auto', maxHeight: window.innerHeight - r.bottom - 16 });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     loadCatalog(provider);
@@ -307,18 +324,21 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
   }, [open, provider]);
   const list: { id: string; label: string; desc?: string }[] =
     provider === 'claude'
-      ? MODELS.filter((m) => !m.older || showOlder || m.id === model)
+      ? catalog?.length
+        ? catalog // Claude Code's own current list
+        : MODELS.filter((m) => !m.older || showOlder || m.id === model)
       : provider === 'relay'
         ? [] // your own app uses its own model
         : [
           { id: '', label: provider === 'cursor' ? 'Auto' : 'Default model', desc: provider === 'cursor' ? 'Cursor picks the model' : 'The model set in your Codex config' },
           ...(catalog ?? []),
         ];
-  const known = provider === 'relay' || list.some((m) => m.id === model);
+  const isOn = (m: { id: string }) => m.id === model || (provider === 'claude' && !!catalog?.length && claudeModel(model)?.id === m.id);
+  const known = provider === 'relay' || list.some(isOn);
   // Codex: the reasoning levels the chosen model supports; Cursor has no effort setting
   const efforts =
     provider === 'claude'
-      ? EFFORTS
+      ? (claudeModel(model)?.efforts ?? EFFORTS.map((x) => x.id)).map((id) => EFFORTS.find((x) => x.id === id) ?? { id, desc: id })
       : provider === 'codex'
         ? (catalog?.find((m) => m.id === model)?.efforts ?? ['low', 'medium', 'high', 'xhigh', 'max']).map((id) => EFFORTS.find((x) => x.id === id) ?? { id, desc: id })
         : [];
@@ -343,7 +363,7 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
         <Icon name="chevronDown" size={11} />
       </button>
       {open && (
-        <div className="model-pop" onKeyDown={(e) => e.stopPropagation()}>
+        <div className="model-pop" style={pos} onKeyDown={(e) => e.stopPropagation()}>
           <div className="mp-h">Agent</div>
           <div className="mp-providers">
             {PROVIDERS.map((p) => (
@@ -358,8 +378,8 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
           {provider !== 'relay' && <div className="mp-h">Model</div>}
           {provider !== 'claude' && provider !== 'relay' && !catalog && <div className="ag-empty">Loading models…</div>}
           {list.map((m) => (
-            <div key={m.id || 'default'} className={'mp-item' + (m.id === model ? ' on' : '')} onClick={() => pick(m.id)}>
-              <span className="mp-check">{m.id === model && <Icon name="check" size={12} />}</span>
+            <div key={m.id || 'default'} className={'mp-item' + (isOn(m) ? ' on' : '')} onClick={() => pick(m.id)}>
+              <span className="mp-check">{isOn(m) && <Icon name="check" size={12} />}</span>
               <span className="mp-text">
                 <span className="mp-label">{m.label}</span>
                 {m.desc && <span className="mp-desc">{m.desc}</span>}
@@ -377,7 +397,7 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
               </span>
             </div>
           )}
-          {provider === 'claude' && !showOlder && (
+          {provider === 'claude' && !showOlder && !catalog?.length && (
             <button className="link-btn mp-more" onClick={() => setShowOlder(true)}>
               Show older models
             </button>
@@ -457,7 +477,7 @@ function AgentState({ title }: { title: string }) {
   return (
     <span className={'agent-state ' + state} title={act ? `${act.text} — ${title}` : title}>
       <span className="agent-state-dot" />
-      {state === 'idle' ? 'Idle' : state === 'wait' ? 'Needs you' : 'Working'}
+      <span className="agent-state-label">{state === 'idle' ? 'Idle' : state === 'wait' ? 'Needs you' : 'Working'}</span>
       {state !== 'idle' && <Elapsed />}
     </span>
   );
@@ -664,10 +684,31 @@ function RelaySetup() {
   );
 }
 
+/** "Using ChatGPT plan · Manage usage" next to the model picker while Codex runs on the user's ChatGPT plan. */
+function PlanBadge() {
+  const busy = useChat((s) => s.busy);
+  const [plan, setPlan] = useState(false);
+  useEffect(() => void window.icut.providerStatus('codex').then((s) => setPlan(!!s.chatgpt?.plan), () => setPlan(false)), [busy]);
+  if (!plan) return null;
+  return (
+    <span className="plan-badge" title="Codex runs on your ChatGPT plan">
+      Using ChatGPT plan ·{' '}
+      <a onClick={() => window.icut.openExternal('https://chatgpt.com/settings/usage')}>Manage usage</a>
+    </span>
+  );
+}
+
 function AuthCallout() {
   const provider = useChat((s) => s.provider);
   const [ready, setReady] = useState(true);
-  useEffect(() => void window.icut.providerStatus(provider).then((s) => setReady(s.ready), () => setReady(true)), [provider]);
+  useEffect(
+    () =>
+      void window.icut.providerStatus(provider).then(
+        (s) => setReady(s.ready),
+        () => setReady(true),
+      ),
+    [provider],
+  );
   // your own app connects (or drops) while the panel is open
   useEffect(() => window.icut.onRelayStatus((st) => provider === 'relay' && setReady(st.ready)), [provider]);
   if (ready) return null;
@@ -676,24 +717,34 @@ function AuthCallout() {
       <div className="auth-callout">
         <b>Almost there</b>
         <RelaySetup />
+        <ChatGptInvite />
       </div>
     );
-  if (provider === 'cursor')
+  if (provider === 'cursor' || provider === 'codex')
     return (
       <div className="auth-callout">
         <b>Connect {agentName(provider)}</b>
         <ProviderAuth provider={provider} compact />
       </div>
     );
-  // the built-in Claude / Codex chat runs on an API key; without one, messages go to the user's own app
+  // the built-in Claude chat runs on an API key; without one, messages go to the user's own app
   return (
     <div className="auth-callout">
       <b>Almost there</b>
       <RelaySetup />
       <div className="hint">
-        Or add your own {provider === 'codex' ? 'OpenAI' : 'Anthropic'} API key in <a onClick={() => setS({ dialog: 'settings' })}>Settings</a> to use the
-        built-in chat.
+        Or add your own Anthropic API key in <a onClick={() => setS({ dialog: 'settings' })}>Settings</a> to use the built-in chat.
       </div>
+      <ChatGptInvite />
+    </div>
+  );
+}
+
+/** For people chatting without an AI set up: use a ChatGPT plan right here (Codex on Sign in with ChatGPT). */
+function ChatGptInvite() {
+  return (
+    <div className="hint">
+      Use your ChatGPT plan in this app: <a onClick={() => setProvider('codex')}>switch to Codex and Continue with ChatGPT</a>.
     </div>
   );
 }
@@ -787,8 +838,8 @@ function ChatRow({ item }: { item: ChatItem }) {
             {item.cost ? ` · $${item.cost.toFixed(3)}` : ''}
             {item.error && !item.ok ? ` · ${item.error}` : ''}
           </span>
-          {item.edits > 0 && (
-            <button className="link-btn" onClick={() => revertTurn(item.snapshot)}>
+          {item.edits > 0 && item.snapshot && (
+            <button className="link-btn" onClick={() => revertTurn(item.snapshot!)}>
               <Icon name="undo" size={11} /> Revert these edits
             </button>
           )}

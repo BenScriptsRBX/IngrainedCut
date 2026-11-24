@@ -147,7 +147,9 @@ class CliAgent {
 // ---------- Codex ----------
 // Codex is large (~450 MB with its native CLI), so the helper installs it the first time someone picks it, into the
 // app's data folder. A checkout of this repo (desktop app, development) has it in node_modules already.
-const CODEX_SDK = '@openai/codex-sdk@0.163.0';
+import * as chatgpt from './chatgptAuth.mjs';
+
+const CODEX_SDK = '@openai/codex-sdk@0.172.0';
 const codexDir = () => path.join(userDataDir(), 'agents');
 
 const findCodexSdk = () => findPackage('@openai/codex-sdk', codexDir());
@@ -156,6 +158,17 @@ async function loadCodexSdk() {
   const dir = findCodexSdk();
   if (!dir) throw new Error('CODEX_MISSING');
   return importPackage(dir);
+}
+
+/** Codex was installed into the app data folder at an older version than this app expects (newer models need it). */
+export function codexOutdated() {
+  const dir = findPackage('@openai/codex-sdk', codexDir());
+  if (!dir || !dir.startsWith(codexDir())) return false;
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).version !== CODEX_SDK.split('@').pop();
+  } catch {
+    return false;
+  }
 }
 
 /** Install Codex into the app data folder (first use), streaming npm's output. */
@@ -193,14 +206,18 @@ export class CodexAgent extends CliAgent {
 
   async turn({ text, context, images = [] }) {
     const s = this.o.getSettings();
-    // a ChatGPT plan is for OpenAI's own Codex apps; here Codex runs on an API key, and plan users connect Codex over MCP
-    if (!s.openaiApiKey) throw new Error('CODEX_NEEDS_KEY');
+    // Signed in with ChatGPT (OpenAI's Sign in with ChatGPT for open-source apps): Codex runs on the user's plan,
+    // with the access token in its environment. Otherwise it runs on the user's OpenAI API key.
+    const planToken = chatgpt.planReady() ? await chatgpt.accessToken() : null;
+    if (!planToken && !s.openaiApiKey) throw new Error('CODEX_NEEDS_KEY');
     const { Codex } = await loadCodexSdk();
+    const env = Object.fromEntries(Object.entries(process.env).filter(([, v]) => typeof v === 'string'));
     const codex = new Codex({
-      apiKey: s.openaiApiKey,
+      ...(planToken ? { env: { ...env, ACCESS_TOKEN: planToken } } : { apiKey: s.openaiApiKey }),
       config: {
         developer_instructions: GUIDE,
         mcp_servers: { [SERVER]: { ...mcpLaunch('codex', this.o.getBridge?.()), startup_timeout_sec: 30, tool_timeout_sec: 1800, default_tools_approval_mode: 'approve' } },
+        ...(planToken ? chatgpt.PLAN_PROVIDER_CONFIG : {}),
       },
     });
     const opts = {
@@ -307,7 +324,18 @@ export class CodexAgent extends CliAgent {
       return `Codex couldn't reach OpenAI — check your internet connection (or a firewall / proxy blocking chatgpt.com and api.openai.com). (${msg.slice(0, 200)})`;
     }
     if (msg === 'CODEX_NEEDS_KEY')
-      return 'The Codex chat here runs on an OpenAI API key: add one in Settings (platform.openai.com → API keys). To use your ChatGPT plan instead, open Codex yourself and connect it to IngrainedCut: Help → Use your own Claude Code, Codex or Cursor (MCP).';
+      return 'Sign in with ChatGPT to chat with Codex on your ChatGPT plan (agent menu → Codex → Continue with ChatGPT), or add an OpenAI API key in Settings.';
+    if (msg === 'CHATGPT_SIGNED_OUT' || /subscription_sharing_invalid_user|chatpass_v2_(scope_not_authorized|invalid_authorization_context)/.test(msg))
+      return 'Your ChatGPT sign-in ended. Sign in again: agent menu → Codex → Continue with ChatGPT.';
+    if (/subscription_sharing_usage_limit_exceeded/.test(msg))
+      return "You've reached your ChatGPT plan's usage limit for IngrainedCut. Manage usage: https://chatgpt.com/settings/usage";
+    if (/subscription_sharing_user_not_eligible/.test(msg))
+      return "This ChatGPT account's plan can't be used in other apps. Use a ChatGPT Plus or Pro plan, or add an OpenAI API key in Settings.";
+    if (/subscription_sharing_(usage|user)_unavailable/.test(msg)) return 'ChatGPT plan usage is temporarily unavailable. Try again in a minute.';
+    if (/subscription_sharing_unsupported_capability|subscription_sharing_route_not_supported/.test(msg))
+      return `That request isn't supported on a ChatGPT plan (try another model). (${msg.slice(0, 300)})`;
+    if (chatgpt.planReady() && /401|unauthori[sz]ed|incorrect api key/i.test(msg))
+      return 'OpenAI rejected your ChatGPT sign-in. Sign in again: agent menu → Codex → Continue with ChatGPT.';
     if (/401|unauthori[sz]ed|not logged in|please (log|sign) in|invalid api key|incorrect api key/i.test(msg)) {
       return `Codex couldn't authenticate with your OpenAI API key — check it in Settings. (${msg.slice(0, 300)})`;
     }
@@ -502,11 +530,10 @@ export class CursorAgent extends CliAgent {
 export async function providerStatus(p, settings) {
   if (p === 'codex') {
     const bin = codexBinary();
-    if (!bin) return { installed: false, loggedIn: false, apiKey: !!settings.openaiApiKey, ready: false, install: 'auto' };
-    const r = await run(bin, ['login', 'status']);
-    const loggedIn = r.code === 0 && /logged in/i.test(r.out) && !/not logged in/i.test(r.out);
-    const method = r.out.match(/logged in using (?:an? )?([^\r\n]+)/i)?.[1]?.trim();
-    return { installed: true, loggedIn, method, apiKey: !!settings.openaiApiKey, ready: !!settings.openaiApiKey };
+    const g = chatgpt.status();
+    const base = { chatgpt: g, email: g.email ?? undefined, apiKey: !!settings.openaiApiKey };
+    if (!bin) return { ...base, installed: false, loggedIn: g.signedIn, ready: false, install: 'auto' };
+    return { ...base, installed: true, loggedIn: g.signedIn, method: g.plan ? 'ChatGPT plan' : undefined, ready: g.plan || !!settings.openaiApiKey };
   }
   if (p === 'cursor') {
     const bin = await cursorBinary();
@@ -548,10 +575,14 @@ export function cancelProviderLogin() {
 }
 
 const modelCache = {};
+export const clearModelCache = (p) => delete modelCache[p];
 export async function providerModels(p) {
   if (modelCache[p]) return modelCache[p];
   let list = [];
-  if (p === 'codex') {
+  if (p === 'codex' && chatgpt.planReady()) {
+    list = await chatgpt.listModels().catch(() => []);
+  }
+  if (p === 'codex' && !list.length) {
     const bin = codexBinary();
     const r = bin ? await run(bin, ['debug', 'models'], { timeout: 20000 }) : { stdout: '' };
     try {

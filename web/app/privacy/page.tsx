@@ -107,6 +107,13 @@ export default function Privacy() {
           privacy policies, not ours. API keys you enter are stored only on your computer.
         </p>
         <p>
+          If you choose <b>Continue with ChatGPT</b>, you sign in on OpenAI’s own page in your browser and allow IngrainedCut to use your ChatGPT plan. OpenAI
+          then gives the helper on your computer a sign-in token, kept in a file in the helper’s data folder on your computer and sent only to OpenAI with your
+          Codex requests. It never passes through our servers. Signing out in the editor revokes it with OpenAI; you can also disconnect IngrainedCut in your
+          ChatGPT settings (Security → Login connections). OpenAI shares your name, email and profile picture with the app for the sign-in; it does not share
+          your ChatGPT conversations or memories.
+        </p>
+        <p>
           If you connect your own Claude Code, Codex or Cursor (“your own app”), what you type in the editor’s chat panel goes from the helper on your computer to
           that app, which sends it to its provider under your account and plan. These messages, and the app’s replies, stay on your computer and never pass
           through our servers.

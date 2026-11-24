@@ -78,11 +78,27 @@ export async function openProject(path?: string) {
   const { data, missing } = await window.icut.loadProject(p);
   const proj = data as Project;
   proj.path = p;
+  showLoaded(proj, missing);
+}
+
+function showLoaded(proj: Project, missing: string[], opts?: { autosaveKey?: string; dirty?: boolean }) {
   for (const m of proj.media) m.status = missing.includes(m.path) ? 'missing' : 'loading';
-  loadProjectState(proj);
+  loadProjectState(proj, opts);
   engine.seek(0);
   for (const m of proj.media) if (m.status !== 'missing') window.icut.refreshAssets({ id: m.id, path: m.path, info: m });
   if (missing.length) toast(`${missing.length} media file(s) are missing`, 'error', 6000);
+}
+
+/** Opens an autosave (or the copy of a project file kept before a Save replaced it). It stays unsaved until you save:
+ *  Save writes it back to the project's own file (the version there now is kept as a copy first). */
+export async function openAutosave(entry: AutosaveEntry, version: AutosaveVersion) {
+  if (!confirmDiscard()) return;
+  const { data, missing } = await window.icut.loadAutosave(version.file);
+  const proj = data as Project;
+  proj.path = entry.path;
+  if (entry.path) proj.name = entry.path.split(/[\\/]/).pop()!.replace(/\.icut$/i, '');
+  showLoaded(proj, missing, { autosaveKey: entry.path ? undefined : entry.key, dirty: true });
+  toast(`Restored the version from ${new Date(version.time).toLocaleString()} — save to keep it`, 'success', 6000);
 }
 
 export async function saveProject(saveAs = false, path?: string): Promise<string | null> {
@@ -102,6 +118,11 @@ export async function saveProject(saveAs = false, path?: string): Promise<string
     });
   }
   if (!target) return null;
+  // an empty project saved over a project file that has a timeline: almost always a mistake
+  if (!s.project.clips.length && !s.project.media.length) {
+    const old = await window.icut.peekProject(target).catch(() => null);
+    if (old && (old.clips || old.media) && !window.confirm(`This project is empty, but "${old.name}" has ${old.clips} clip(s) and ${old.media} media file(s).\n\nReplace it with an empty project? (The current file is kept as a version on the start page.)`)) return null;
+  }
   const name = target.split(/[\\/]/).pop()!.replace(/\.icut$/i, '');
   const data = stripForFile({ ...s.project, path: target, name });
   await window.icut.saveProject(target, data);

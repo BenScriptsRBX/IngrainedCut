@@ -49,6 +49,10 @@ export default function Terms() {
           them. We do not control, and are not responsible for, third-party services or their outputs.
         </p>
         <p>
+          If you continue with ChatGPT, Codex in {SITE.name} runs on your ChatGPT plan through OpenAI’s Sign in with ChatGPT: its usage counts toward your
+          ChatGPT plan and any limits you set for {SITE.name} in your ChatGPT settings, under OpenAI’s terms.
+        </p>
+        <p>
           If you connect your own Claude Code, Codex or Cursor (“your own app”), the AI runs in that app on your own plan: its usage counts toward your
           subscription with that provider, and you are responsible for using it within that provider’s terms. {SITE.name} does not provide, resell or pay for
           that AI.

@@ -254,13 +254,14 @@ code, .mono { font-family: Consolas, 'Cascadia Mono', monospace; }
 .tl-scroll.tool-razor .tl-lane { cursor: crosshair; }
 .tl-content { position: relative; }
 .tl-ruler-row { position: sticky; top: 0; height: 28px; z-index: 20; background: #1e1e1e; border-bottom: 1px solid #111; }
-.tl-corner { position: sticky; left: 0; width: 172px; height: 28px; background: #1e1e1e; z-index: 3; display: flex; align-items: center; padding: 0 10px; border-right: 1px solid #111; }
+.tl-corner { position: sticky; left: 0; width: 172px; height: 28px; background: #1e1e1e; z-index: 5; display: flex; align-items: center; padding: 0 10px; border-right: 1px solid #111; }
 .tl-seqname { color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tl-ruler { position: absolute; top: 0; cursor: pointer; }
 .tl-inout { position: absolute; top: 16px; height: 12px; background: rgba(140, 140, 140, 0.35); pointer-events: none; }
 .tl-marker { position: absolute; top: 2px; width: 10px; height: 12px; margin-left: -5px; background: var(--mc, #3bb26b); clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%); cursor: pointer; z-index: 2; }
 .tl-ph-head { position: absolute; top: 0; width: 13px; height: 18px; margin-left: -6px; background: var(--tc); clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%); pointer-events: none; z-index: 4; }
-.tl-ph-line { position: absolute; top: 28px; width: 1px; background: var(--tc); pointer-events: none; z-index: 15; }
+.tl-ph-clip { position: absolute; top: 28px; overflow: hidden; pointer-events: none; z-index: 15; }
+.tl-ph-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--tc); pointer-events: none; }
 .tl-snapline { position: absolute; top: 0; width: 1px; background: #f5d442; z-index: 16; pointer-events: none; box-shadow: 0 0 3px #f5d442; }
 .tl-marquee { position: absolute; border: 1px solid #9ac7ff; background: rgba(89, 168, 255, 0.12); z-index: 17; pointer-events: none; }
 .tl-divider { height: 6px; background: #121212; position: relative; }
@@ -462,6 +463,16 @@ kbd { background: #333; border: 1px solid #4a4a4a; border-bottom-width: 2px; bor
 .chat-title { flex-shrink: 0; }
 .model-btn { white-space: nowrap; padding: 3px 6px; }
 .agents-btn { margin-left: 4px; padding: 2px 7px; }
+/* a narrow AI panel: the model button shrinks (its name ends in "…") before anything spills past the edge */
+.chat-head { container-type: inline-size; }
+.chat-head .model-picker { min-width: 0; flex-shrink: 1; }
+.chat-head .model-btn { max-width: 100%; min-width: 0; }
+.chat-head .model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.chat-head .icon-btn, .chat-head .model-btn svg { flex-shrink: 0; }
+@container (max-width: 400px) {
+  .chat-head .agent-state-label, .chat-head .model-effort { display: none; }
+  .chat-head .agent-state { padding: 0 7px; }
+}
 .hf-renders { position: fixed; right: 16px; bottom: 34px; display: flex; flex-direction: column; gap: 8px; z-index: 1500; }
 .hf-renders .export-progress { position: static; }
 .export-progress.hf { border-color: #5b4a8a; }
@@ -549,3 +560,36 @@ a.logo { text-decoration: none; }
 /* AI panel / Help: pick Claude Code, Codex or Cursor (HelperConnect.tsx AppPicker) */
 .app-select { background: #1e1e1e; color: inherit; border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; font: inherit; }
 .plan-note { font-size: 11.5px; color: var(--dim); margin-top: -4px; }
+
+/* ---------- start page (recent projects, autosaves) ---------- */
+.start-page { position: absolute; inset: 34px 0 0 0; background: var(--bg); z-index: 1500; overflow: auto; user-select: text; }
+.start-inner { max-width: 1180px; margin: 0 auto; padding: 28px 32px 40px; }
+.start-head { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+.logo.big { width: 40px; height: 40px; }
+.logo.big span { width: 34px; height: 34px; font-size: 15px; border-radius: 8px; }
+.start-title { font-size: 20px; font-weight: 600; }
+.start-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 28px; align-items: start; }
+.start-cols h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #e6e6e6; }
+.start-note { margin: -2px 0 10px; line-height: 1.5; }
+.start-empty { padding: 14px 0; }
+.start-item { display: block; width: 100%; text-align: left; background: var(--panel); border: 1px solid #2c2c2c; border-radius: 6px; padding: 9px 12px; margin-bottom: 8px; cursor: pointer; }
+.start-item:hover { border-color: #444; background: #222; }
+.start-item.as { cursor: default; }
+.si-name { font-size: 13px; font-weight: 600; color: #ececec; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.si-row { display: flex; align-items: center; gap: 8px; }
+.si-row .si-name { flex: 1; }
+.si-sub { display: flex; gap: 8px; margin-top: 3px; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.si-badge { font-size: 10.5px; padding: 1px 7px; border-radius: 9px; background: #23352a; color: #8fd6a8; white-space: nowrap; }
+.si-badge.warn { background: #3a2f1c; color: #f0c674; }
+.si-actions { display: flex; gap: 6px; margin-top: 8px; }
+.si-versions { margin-top: 8px; border-top: 1px solid #2c2c2c; padding-top: 6px; }
+.si-version { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 11.5px; }
+.si-kind { font-size: 10.5px; padding: 1px 7px; border-radius: 9px; background: #2a2f3a; color: #a9c4ef; white-space: nowrap; }
+.si-kind.replaced { background: #3a2f1c; color: #f0c674; }
+.app-version { font-size: 10.5px; color: var(--dim); margin: 0 4px 0 -4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Sign in with ChatGPT (OpenAI's button style: black, white ChatGPT logo) */
+.btn.chatgpt-btn { background: #000; border-color: #000; color: #fff; gap: 8px; padding: 6px 14px; border-radius: 999px; font-weight: 600; }
+.btn.chatgpt-btn:hover { background: #222; }
+.plan-pill { font-size: 10.5px; padding: 1px 8px; border-radius: 9px; background: #1f3328; color: #8fd6a8; }
+.plan-badge { font-size: 10.5px; color: var(--dim); white-space: nowrap; margin-left: 6px; }

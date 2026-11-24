@@ -12,12 +12,34 @@ import {
   type AudioCodec, type StreamTargetChunk,
 } from 'mediabunny';
 
+export type ExportFormat =
+  | 'mp4-h264' | 'mp4-h265' | 'mp4-av1' | 'webm-vp9' | 'mov-prores' | 'mov-dnxhr' | 'gif'
+  | 'mp3' | 'm4a-aac' | 'wav' | 'flac';
+
 export interface ExportOptions {
   path: string;
-  format: 'mp4-h264' | 'mp4-h265' | 'mov-prores' | 'webm-vp9' | 'gif' | 'mp3' | 'wav';
+  format: ExportFormat;
+  /** CRF-like: 14 best … 27 smallest (ignored when `bitrate` is set) */
   quality?: number;
   range?: 'all' | 'in-out';
+  /** output size relative to the sequence (the aspect ratio stays) */
   scale?: number;
+  /** output frame rate (default: the sequence's) */
+  fps?: number;
+  /** target video bitrate in bits per second (instead of `quality`) */
+  bitrate?: number;
+  /** auto: GPU/WebCodecs when available; cpu: ffmpeg software encoders (x264, x265, libaom…) */
+  encoder?: 'auto' | 'cpu';
+  /** ProRes: 0 Proxy, 1 LT, 2 422, 3 422 HQ, 4 4444 */
+  proresProfile?: number;
+  /** DNxHR: dnxhr_lb | dnxhr_sq | dnxhr_hq | dnxhr_hqx | dnxhr_444 */
+  dnxhrProfile?: string;
+  /** audio bitrate for lossy audio, kbps */
+  audioBitrate?: number;
+  /** audio sample rate, Hz */
+  sampleRate?: number;
+  /** WAV bit depth */
+  bitDepth?: 16 | 24;
 }
 
 let cancelled = false;
@@ -103,16 +125,22 @@ export function encodeWav(ab: AudioBuffer): ArrayBuffer {
 const even = (x: number) => Math.max(2, Math.round(x / 2) * 2);
 
 /** Formats encoded in the browser with WebCodecs (hardware where available); the rest go through ffmpeg. */
-const WEBCODECS: Partial<Record<ExportOptions['format'], { codec: 'avc' | 'hevc' | 'vp9'; container: 'mp4' | 'webm'; factor: number }>> = {
+const WEBCODECS: Partial<Record<ExportFormat, { codec: 'avc' | 'hevc' | 'vp9' | 'av1'; container: 'mp4' | 'webm'; factor: number }>> = {
   'mp4-h264': { codec: 'avc', container: 'mp4', factor: 1 },
   'mp4-h265': { codec: 'hevc', container: 'mp4', factor: 0.65 },
+  'mp4-av1': { codec: 'av1', container: 'mp4', factor: 0.55 },
   'webm-vp9': { codec: 'vp9', container: 'webm', factor: 0.7 },
 };
 
-/** Map the dialog's CRF-like quality (14 best … 27 smallest) to a bitrate for hardware encoders. */
-function bitrateFor(quality: number, W: number, H: number, fps: number, factor: number) {
+export const AUDIO_ONLY: ExportFormat[] = ['mp3', 'm4a-aac', 'wav', 'flac'];
+
+/** Map the dialog's CRF-like quality (14 best … 27 smallest) to a bitrate for hardware encoders. High frame rates
+ *  need fewer bits per frame (frames are closer together), so past 60 fps each extra frame counts half; capped at
+ *  what hardware encoders accept. */
+export function bitrateFor(quality: number, W: number, H: number, fps: number, factor: number) {
   const bpp = quality <= 14 ? 0.32 : quality <= 18 ? 0.2 : quality <= 22 ? 0.12 : 0.07;
-  return Math.round(W * H * fps * bpp * factor);
+  const fpsEff = fps <= 60 ? fps : 60 + (fps - 60) * 0.5;
+  return Math.min(400e6, Math.round(W * H * fpsEff * bpp * factor));
 }
 
 /**
@@ -154,33 +182,33 @@ function hardwareEncoderWorks(codecString: string): Promise<boolean> {
   return hwWorks.get(codecString)!;
 }
 
-const PROBE_CODEC: Record<string, string> = { avc: 'avc1.640028', hevc: 'hvc1.1.6.L120.B0', vp9: 'vp09.00.40.08' };
+const PROBE_CODEC: Record<string, string> = { avc: 'avc1.640028', hevc: 'hvc1.1.6.L120.B0', vp9: 'vp09.00.40.08', av1: 'av01.0.08M.08' };
 
 /** Formats the website can export with no helper: everything is encoded and written in the page. */
-export const BROWSER_FORMATS: ExportOptions['format'][] = ['mp4-h264', 'webm-vp9', 'mp4-h265', 'wav'];
+export const BROWSER_FORMATS: ExportFormat[] = ['mp4-h264', 'webm-vp9', 'mp4-h265', 'mp4-av1', 'wav'];
 
 /**
  * Website without the helper: mediabunny encodes video (WebCodecs) and the audio mix together, written straight
  * into the file the user picked (or offered as a download when the browser has no save picker).
  */
 async function exportInBrowser(x: {
-  p: Project; o: ExportOptions; a: number; b: number; W: number; H: number; fps: number; format: ExportOptions['format'];
+  p: Project; o: ExportOptions; a: number; b: number; W: number; H: number; fps: number; format: ExportFormat;
   quality: number; frames: number; frameTimes: number[]; progress: (i: number) => void;
 }): Promise<{ path: string; size: number }> {
   const { p, o, W, H, fps, format, frames, frameTimes } = x;
   const name = o.path.split(/[\\/]/).pop() || 'export';
-  if (!BROWSER_FORMATS.includes(format)) throw new Error('This format needs the IngrainedCut helper on your computer. In the browser you can export H.264, HEVC, VP9 or WAV.');
-  const mix = await renderMix(p, x.a, x.b);
+  if (!BROWSER_FORMATS.includes(format)) throw new Error('This format needs the IngrainedCut helper on your computer. In the browser you can export H.264, HEVC, AV1, VP9 or WAV.');
+  const mix = await renderMix(p, x.a, x.b, o.sampleRate ?? 48000);
   if (format === 'wav') {
     const blob = new Blob([encodeWav(mix)], { type: 'audio/wav' });
     await saveBlob(name, blob);
     return { path: name, size: blob.size };
   }
   const wc = WEBCODECS[format]!;
-  const q = new Quality({ bitrate: bitrateFor(x.quality, W, H, fps, wc.factor), bitrateMode: 'variable' });
+  const q = new Quality({ bitrate: o.bitrate || bitrateFor(x.quality, W, H, fps, wc.factor), bitrateMode: 'variable' });
   const hw = await hardwareEncoderWorks(PROBE_CODEC[wc.codec]);
   if (!((hw || wc.codec !== 'hevc') && (await canEncodeVideo(wc.codec, { width: W, height: H, quality: q })))) {
-    throw new Error(`This browser can't encode ${wc.codec === 'hevc' ? 'HEVC' : wc.codec.toUpperCase()} video here. Try H.264, or start the IngrainedCut helper.`);
+    throw new Error(`This browser can't encode ${wc.codec === 'hevc' ? 'HEVC' : wc.codec.toUpperCase()} video at ${W}×${H}, ${Math.round(fps * 100) / 100} fps here. Try H.264 or a smaller size, or start the IngrainedCut helper.`);
   }
   let usableAudio: AudioCodec | null = null;
   for (const c of (wc.container === 'mp4' ? ['aac', 'opus'] : ['opus']) as AudioCodec[]) {
@@ -208,7 +236,7 @@ async function exportInBrowser(x: {
     hardwareAcceleration: hw ? 'prefer-hardware' : 'prefer-software',
   });
   output.addVideoTrack(video, { frameRate: fps });
-  const audio = usableAudio ? new AudioBufferSource({ codec: usableAudio, bitrate: 192_000 }) : null;
+  const audio = usableAudio ? new AudioBufferSource({ codec: usableAudio, bitrate: (o.audioBitrate ?? 192) * 1000 }) : null;
   if (audio) output.addAudioTrack(audio);
   try {
     await output.start();
@@ -252,13 +280,15 @@ export async function runExport(o: ExportOptions): Promise<ExportResult> {
   const a = useInOut ? p.inPoint! : 0;
   const b = useInOut ? p.outPoint! : sequenceDuration(p);
   if (b - a <= 0) throw new Error('The sequence is empty — nothing to export');
-  const fps = p.settings.fps;
+  const fps = o.fps && o.fps > 0 ? Math.min(240, o.fps) : p.settings.fps;
   const scale = o.scale ?? 1;
   const W = even(p.settings.width * scale);
   const H = even(p.settings.height * scale);
+  if (W > 8192 || H > 8192) throw new Error(`${W}×${H} is too big to export — the largest size is 8K (7680×4320 for 16:9).`);
   const format = o.format ?? 'mp4-h264';
   const quality = o.quality ?? 18;
-  const audioOnly = format === 'mp3' || format === 'wav';
+  const audioOnly = AUDIO_ONLY.includes(format);
+  const sampleRate = o.sampleRate ?? 48000;
   const frames = Math.max(1, Math.round((b - a) * fps));
   const frameTimes = Array.from({ length: frames }, (_, i) => a + i / fps);
   const progress = (i: number) => setS({ exportJob: { progress: i / frames, phase: `Rendering frame ${i + 1} / ${frames}`, path: o.path } });
@@ -274,12 +304,13 @@ export async function runExport(o: ExportOptions): Promise<ExportResult> {
       const r = await exportInBrowser({ p, o, a, b, W, H, fps, format, quality, frames, frameTimes, progress });
       return done(r, 'webcodecs');
     }
-    const wav = format !== 'gif' ? encodeWav(await renderMix(p, a, b)) : null;
+    const wav = format !== 'gif' ? encodeWav(await renderMix(p, a, b, sampleRate)) : null;
+    const enc = { audioBitrate: o.audioBitrate, bitDepth: o.bitDepth, proresProfile: o.proresProfile, dnxhrProfile: o.dnxhrProfile, bitrate: o.bitrate };
 
     // ---- fast path: WebCodecs decode + hardware encode, ffmpeg only muxes ----
-    const wc = !audioOnly ? WEBCODECS[format] : undefined;
+    const wc = !audioOnly && o.encoder !== 'cpu' ? WEBCODECS[format] : undefined;
     if (wc && typeof VideoEncoder !== 'undefined') {
-      const q = new Quality({ bitrate: bitrateFor(quality, W, H, fps, wc.factor), bitrateMode: 'variable' });
+      const q = new Quality({ bitrate: o.bitrate || bitrateFor(quality, W, H, fps, wc.factor), bitrateMode: 'variable' });
       const hw = await hardwareEncoderWorks(PROBE_CODEC[wc.codec]);
       // HEVC has no software WebCodecs encoder; without working hardware it goes through ffmpeg (x265)
       const usable = (hw || wc.codec !== 'hevc') && (await canEncodeVideo(wc.codec, { width: W, height: H, quality: q }));
@@ -314,7 +345,7 @@ export async function runExport(o: ExportOptions): Promise<ExportResult> {
           }
           setS({ exportJob: { progress: 1, phase: 'Finalizing…', path: o.path } });
           await output.finalize();
-          return done(await window.icut.exportWcFinish({ outPath: o.path, audio: wav, format }), 'webcodecs');
+          return done(await window.icut.exportWcFinish({ outPath: o.path, audio: wav, format, ...enc }), 'webcodecs');
         } catch (e) {
           await output.cancel().catch(() => {});
           await window.icut.exportWcCancel();
@@ -327,13 +358,15 @@ export async function runExport(o: ExportOptions): Promise<ExportResult> {
     }
 
     // ---- ffmpeg path (ProRes, GIF, audio-only, or no WebCodecs encoder): raw frames piped to ffmpeg ----
-    await window.icut.exportStart({ outPath: o.path, width: W, height: H, fps, format, quality, audio: wav });
+    await window.icut.exportStart({ outPath: o.path, width: W, height: H, fps, format, quality, audio: wav, ...enc });
     try {
       if (!audioOnly) {
         const comp = new Compositor();
         comp.setSize(W, H);
         comp.frames = new ExportFrames(p, frameTimes); // decoding still uses WebCodecs
         // keep a few frames in flight so rendering overlaps sending/encoding (frames still arrive in order)
+        // (fewer for huge frames: an 8K frame is 130 MB of pixels)
+        const maxInFlight = W * H > 3840 * 2160 ? 1 : W * H > 1920 * 1080 ? 2 : 4;
         const inFlight: Promise<void>[] = [];
         try {
           for (let i = 0; i < frames; i++) {
@@ -342,7 +375,7 @@ export async function runExport(o: ExportOptions): Promise<ExportResult> {
             await comp.render(p, frameTimes[i], 'export');
             const img = comp.ctx.getImageData(0, 0, W, H);
             inFlight.push(window.icut.exportFrame(img.data.buffer));
-            if (inFlight.length >= 4) await inFlight.shift();
+            if (inFlight.length >= maxInFlight) await inFlight.shift();
             if (i % 3 === 0) progress(i);
           }
           await Promise.all(inFlight);

@@ -47,6 +47,10 @@ export interface EditorState {
   gestureBase: Project | null;
   /** Website mode: the account project this editor is bound to. */
   cloud: { id: string; status: 'saved' | 'saving' | 'pending' | 'error' } | null;
+  /** Desktop: the start page (recent projects and autosaves) over the editor. */
+  startPage: boolean;
+  /** counts project loads (open, new, restore), so the chat panel can switch to that project's chat */
+  loadSeq: number;
 }
 
 export const useEditor = create<EditorState>()(() => ({
@@ -79,6 +83,8 @@ export const useEditor = create<EditorState>()(() => ({
   targetAudio: 'a1',
   gestureBase: null,
   cloud: null,
+  startPage: false,
+  loadSeq: 0,
 }));
 
 export const S = () => useEditor.getState();
@@ -225,8 +231,14 @@ export function toast(message: string, kind: Toast['kind'] = 'info', ms = 3500) 
   setTimeout(() => setS((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), ms);
 }
 
-export function loadProjectState(p: Project) {
-  setS({ project: p, past: [], future: [], dirty: false, selection: [], playhead: 0, selectedMediaId: null, source: { mediaId: null, in: null, out: null, time: 0 } });
+// Autosaves of a project that was never saved are grouped by this id (one per opened/new project).
+const newAutosaveKey = () => 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+let autosaveKey = newAutosaveKey();
+export const getAutosaveKey = () => autosaveKey;
+
+export function loadProjectState(p: Project, opts: { autosaveKey?: string; dirty?: boolean } = {}) {
+  autosaveKey = opts.autosaveKey ?? newAutosaveKey();
+  setS({ project: p, past: [], future: [], dirty: !!opts.dirty, startPage: false, loadSeq: S().loadSeq + 1, selection: [], playhead: 0, selectedMediaId: null, source: { mediaId: null, in: null, out: null, time: 0 } });
 }
 
 export function stripForFile(p: Project): Project {

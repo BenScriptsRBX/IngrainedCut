@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useEditor, setS, S, commit, toast } from '../store';
 import { Modal, ColorSwatch } from './Widgets';
 import { Icon } from './Icons';
-import { runExport, cancelExport, BROWSER_FORMATS, type ExportOptions } from '../exporter';
+import chatgptLogo from '../assets/chatgpt-logo-white.svg';
+import { cancelExport } from '../exporter';
+import { ExportDialog } from './ExportDialog';
 import { isBrowserEngine, isSite } from '../webBridge';
 import { SyncDialog, SilenceDialog } from './EditDialogs';
 import { AppPicker, MCP_APPS, NodeLink, connectCommand, useMcpApp } from './HelperConnect';
@@ -28,140 +30,6 @@ export function Dialogs() {
       <CompositionRenders />
       <Toasts />
     </>
-  );
-}
-
-const FORMATS: { id: ExportOptions['format']; label: string; ext: string }[] = [
-  { id: 'mp4-h264', label: 'H.264 (.mp4)', ext: 'mp4' },
-  { id: 'mp4-h265', label: 'HEVC / H.265 (.mp4)', ext: 'mp4' },
-  { id: 'mov-prores', label: 'Apple ProRes 422 HQ (.mov)', ext: 'mov' },
-  { id: 'webm-vp9', label: 'VP9 (.webm)', ext: 'webm' },
-  { id: 'gif', label: 'Animated GIF (.gif)', ext: 'gif' },
-  { id: 'mp3', label: 'MP3 audio only (.mp3)', ext: 'mp3' },
-  { id: 'wav', label: 'WAV audio only (.wav)', ext: 'wav' },
-];
-
-function ExportDialog({ onClose }: { onClose: () => void }) {
-  const project = useEditor((s) => s.project);
-  // in the browser (no helper) only the formats the page can encode itself; files go where the user picks
-  const inBrowser = isBrowserEngine();
-  const formats = inBrowser ? FORMATS.filter((f) => BROWSER_FORMATS.includes(f.id)) : FORMATS;
-  const [format, setFormat] = useState<ExportOptions['format']>('mp4-h264');
-  const [quality, setQuality] = useState(18);
-  const [scale, setScale] = useState(1);
-  const hasInOut = project.inPoint != null && project.outPoint != null && project.outPoint > project.inPoint;
-  const [range, setRange] = useState<'all' | 'in-out'>(hasInOut ? 'in-out' : 'all');
-  const [path, setPath] = useState('');
-  const ext = FORMATS.find((f) => f.id === format)!.ext;
-  useEffect(() => {
-    if (inBrowser) return setPath(`${project.settings.name}.${ext}`);
-    window.icut.appInfo().then((i) => {
-      const dir = project.path ? project.path.replace(/[\\/][^\\/]+$/, '') : i.documents + '\\IngrainedCut';
-      setPath(`${dir}\\${project.settings.name}.${ext}`);
-    });
-  }, []);
-  useEffect(() => setPath((p) => p.replace(/\.[a-z0-9]+$/i, '.' + ext)), [ext]);
-  const dur = range === 'in-out' && hasInOut ? project.outPoint! - project.inPoint! : sequenceDuration(project);
-  const W = Math.round((project.settings.width * scale) / 2) * 2;
-  const H = Math.round((project.settings.height * scale) / 2) * 2;
-  const start = async () => {
-    let out = path;
-    if (inBrowser) {
-      // the save picker must open inside this click
-      const p = await window.icut.saveDialog({ title: 'Export', defaultPath: path, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
-      if (!p) return;
-      out = p;
-    }
-    onClose();
-    try {
-      await runExport({ path: out, format, quality, range, scale });
-    } catch (e: any) {
-      toast(e.message, 'error', 8000);
-    }
-  };
-  return (
-    <Modal
-      title="Export Settings"
-      onClose={onClose}
-      width={560}
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn primary" onClick={start} disabled={!path || dur <= 0}>
-            Export
-          </button>
-        </>
-      }
-    >
-      <div className="form">
-        <label>Format</label>
-        <select value={format} onChange={(e) => setFormat(e.target.value as any)}>
-          {formats.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.label}
-            </option>
-          ))}
-        </select>
-        {!['mp3', 'wav', 'mov-prores', 'gif'].includes(format) && (
-          <>
-            <label>Quality</label>
-            <select value={quality} onChange={(e) => setQuality(Number(e.target.value))}>
-              <option value={14}>Maximum (large file)</option>
-              <option value={18}>High</option>
-              <option value={22}>Medium</option>
-              <option value={27}>Low (small file)</option>
-            </select>
-          </>
-        )}
-        {!['mp3', 'wav'].includes(format) && (
-          <>
-            <label>Resolution</label>
-            <select value={scale} onChange={(e) => setScale(Number(e.target.value))}>
-              <option value={1}>Match sequence ({project.settings.width}×{project.settings.height})</option>
-              <option value={0.75}>75%</option>
-              <option value={0.5}>50%</option>
-              <option value={0.25}>25%</option>
-            </select>
-          </>
-        )}
-        <label>Range</label>
-        <select value={range} onChange={(e) => setRange(e.target.value as any)}>
-          <option value="all">Entire Sequence</option>
-          <option value="in-out" disabled={!hasInOut}>
-            Sequence In/Out {hasInOut ? '' : '(not set)'}
-          </option>
-        </select>
-        <label>{inBrowser ? 'File Name' : 'Output Name'}</label>
-        <div className="row">
-          <input className="grow" value={path} onChange={(e) => setPath(e.target.value)} />
-          {!inBrowser && (
-            <button
-              className="btn"
-              onClick={async () => {
-                const p = await window.icut.saveDialog({ title: 'Export', defaultPath: path, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
-                if (p) setPath(p);
-              }}
-            >
-              Browse…
-            </button>
-          )}
-        </div>
-      </div>
-      {inBrowser && <div className="hint">Encoded right here in your browser. ProRes, GIF and MP3 need the IngrainedCut helper.</div>}
-      <div className="export-summary">
-        <div>
-          <b>Video:</b> {['mp3', 'wav'].includes(format) ? 'none' : `${W}×${H}, ${project.settings.fps} fps`}
-        </div>
-        <div>
-          <b>Audio:</b> {format === 'gif' ? 'none' : '48 kHz stereo'}
-        </div>
-        <div>
-          <b>Duration:</b> {fmtTC(dur, project.settings.fps)}
-        </div>
-      </div>
-    </Modal>
   );
 }
 
@@ -435,6 +303,84 @@ export function AuthBox({ compact }: { compact?: boolean }) {
   );
 }
 
+/** OpenAI's "Continue with ChatGPT" button (white ChatGPT logo on black, per OpenAI's Sign in with ChatGPT guidelines). */
+export function ContinueWithChatGPT({ onClick, busy }: { onClick: () => void; busy?: boolean }) {
+  return (
+    <button className="btn chatgpt-btn" disabled={busy} onClick={onClick}>
+      <img src={chatgptLogo} width={16} height={16} alt="" />
+      {busy ? 'Waiting for the browser…' : 'Continue with ChatGPT'}
+    </button>
+  );
+}
+
+/** Codex: Sign in with ChatGPT so the chat runs on the user's ChatGPT plan (or on an OpenAI API key). */
+function ChatGptAuth({ st, busy, login, refresh, compact }: { st: ProviderStatus; busy: boolean; login: () => Promise<void>; refresh: () => Promise<void>; compact?: boolean }) {
+  const g = st.chatgpt;
+  const [welcome, setWelcome] = useState(false);
+  const signIn = async () => {
+    await login();
+    const now = await window.icut.providerStatus('codex').catch(() => null);
+    if (now?.chatgpt?.plan && !now.chatgpt.welcomeSeen) setWelcome(true);
+  };
+  return (
+    <div className="auth-box">
+      {!st.installed && <div className="hint">Codex downloads the first time you use it.</div>}
+      {g?.plan ? (
+        <>
+          <div>
+            ✓ Signed in with ChatGPT{g.email ? ` as ${g.email}` : ''}
+          </div>
+          <div className="row" style={{ gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+            <span className="plan-pill">Using ChatGPT plan</span>
+            <a onClick={() => window.icut.openExternal('https://chatgpt.com/settings/usage')}>Manage usage</a>
+            <a
+              onClick={async () => {
+                await window.icut.chatgptSignOut();
+                await refresh();
+                toast('Signed out of ChatGPT', 'info');
+              }}
+            >
+              Sign out
+            </a>
+          </div>
+        </>
+      ) : (
+        <>
+          {!compact && <div className="form-h" style={{ marginTop: 0 }}>Use your ChatGPT plan</div>}
+          <div className="hint" style={{ marginTop: 0 }}>
+            Complete eligible AI requests in this app with usage included in your ChatGPT plan or credits balance.
+          </div>
+          {g?.signedIn && !g.plan && <div className="warn-text">Signed in, but using your plan here wasn't allowed. Continue again and allow it.</div>}
+          <div className="row" style={{ marginTop: 6, flexWrap: 'wrap', gap: 8 }}>
+            <ContinueWithChatGPT onClick={signIn} busy={busy} />
+            {busy && (
+              <button className="btn sm" onClick={() => window.icut.providerCancelLogin()}>
+                Cancel
+              </button>
+            )}
+          </div>
+          {st.apiKey ? <div className="hint">Until then, the chat uses your OpenAI API key.</div> : <div className="hint">Or add an OpenAI API key{compact ? ' in Settings' : ' below'}.</div>}
+        </>
+      )}
+      {welcome && (
+        <Modal
+          title="You're using your ChatGPT plan"
+          onClose={() => (setWelcome(false), window.icut.chatgptWelcomeSeen())}
+          width={420}
+          footer={
+            <button className="btn primary" onClick={() => (setWelcome(false), window.icut.chatgptWelcomeSeen())}>
+              Got it
+            </button>
+          }
+        >
+          Eligible usage in this app uses your ChatGPT plan. Manage usage in your{' '}
+          <a onClick={() => window.icut.openExternal('https://chatgpt.com/settings/usage')}>ChatGPT settings</a>.
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // keyOnly: the built-in chat runs on an API key; plan users connect the provider's own app over MCP instead
 const PROVIDER_COPY = {
   codex: { name: 'Codex', signIn: 'Sign in with ChatGPT', key: 'an OpenAI API key', keyOnly: true, plan: 'ChatGPT plan' },
@@ -497,20 +443,7 @@ export function ProviderAuth({ provider, compact }: { provider: 'codex' | 'curso
         )}
       </div>
     );
-  if (copy.keyOnly)
-    return (
-      <div className="auth-box">
-        <div>✓ {copy.name} is installed</div>
-        {st.apiKey ? (
-          <div>✓ The chat uses your API key</div>
-        ) : (
-          <div className="hint">
-            <span className="warn-text">Add {copy.key}{compact ? ' in Settings' : ' below'} to chat here.</span> Have a {copy.plan}?{' '}
-            <a onClick={() => setS({ dialog: 'mcp' })}>Connect your own {copy.name}</a> instead — it then edits this timeline on your plan.
-          </div>
-        )}
-      </div>
-    );
+  if (provider === 'codex') return <ChatGptAuth st={st} busy={busy} login={login} refresh={refresh} compact={compact} />;
   return (
     <div className="auth-box">
       {st.loggedIn ? (

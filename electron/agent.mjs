@@ -171,7 +171,7 @@ export class AgentManager {
         ...(cc.path.endsWith('.js') ? { executable: 'node' } : {}),
         model: s.model || 'claude-opus-5-5',
         effort: s.effort || 'medium',
-        cwd: resume?.cwd || this.o.getCwd(),
+        cwd: (this.cwd = resume?.cwd || this.o.getCwd()),
         resume: resume?.sessionId,
         env,
         includePartialMessages: true,
@@ -244,7 +244,7 @@ export class AgentManager {
         if (m.subtype === 'init') {
           this.sessionId = m.session_id;
           const srv = m.mcp_servers?.find((x) => x.name === SERVER);
-          emit({ type: 'init', model: m.model, sessionId: m.session_id, mcpStatus: srv?.status, apiKeySource: m.apiKeySource, version: m.claude_code_version });
+          emit({ type: 'init', model: m.model, sessionId: m.session_id, cwd: this.cwd, mcpStatus: srv?.status, apiKeySource: m.apiKeySource, version: m.claude_code_version });
         } else if (m.subtype === 'status') {
           emit({ type: 'status', status: m.status, permissionMode: m.permissionMode });
         } else if (m.subtype === 'task_started') {
@@ -338,6 +338,48 @@ export class AgentManager {
     this.busy = true;
     this.input.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null });
     this.o.emit('agent:event', { type: 'busy' });
+  }
+
+  /**
+   * The models Claude Code offers right now (its own list, so new models show up as Claude Code updates). Asks the
+   * running conversation, or a short-lived Claude Code that never gets a prompt. [] when it can't start.
+   */
+  async models() {
+    if (!this.sdk) {
+      try {
+        this.sdk = await claudeSdk();
+      } catch {
+        return [];
+      }
+    }
+    const s = this.o.getSettings();
+    const cc = findClaudeCode();
+    let q = this.q;
+    let own = null;
+    if (!q) {
+      if (!cc || !s.apiKey) return [];
+      const env = { ...process.env, ANTHROPIC_API_KEY: s.apiKey };
+      delete env.CLAUDE_CODE_OAUTH_TOKEN;
+      own = q = this.sdk.query({
+        prompt: { async *[Symbol.asyncIterator]() { await new Promise(() => {}); } },
+        options: { pathToClaudeCodeExecutable: cc.path, ...(cc.path.endsWith('.js') ? { executable: 'node' } : {}), cwd: this.o.getCwd(), env },
+      });
+    }
+    try {
+      const list = await Promise.race([q.supportedModels(), new Promise((r) => setTimeout(() => r(null), 30000))]);
+      return (list ?? []).map((m) => {
+        // "Opus" + "Opus 5.5 · Best for everyday, complex tasks · $4/$20 per Mtok" → "Opus 5.5" + "Best for everyday, complex tasks"
+        const parts = String(m.description ?? '').split(' · ').filter((p) => !/\$\d/.test(p));
+        const named = parts.length > 1 && parts[0].startsWith(m.displayName + ' ');
+        return { id: m.value, label: named ? parts[0] : m.displayName, desc: (named ? parts.slice(1) : parts).join(' · '), efforts: m.supportedEffortLevels, resolved: m.resolvedModel };
+      });
+    } catch {
+      return [];
+    } finally {
+      try {
+        own?.close();
+      } catch {}
+    }
   }
 
   async interrupt() {

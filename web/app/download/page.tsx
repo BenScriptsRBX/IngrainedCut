@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
 import { HelperStatus } from './HelperStatus';
-import { HELPER_COMMAND } from '@/lib/helper';
+import { HELPER_COMMAND, HELPER_DOWNLOAD } from '@/lib/helper';
 
-export const metadata: Metadata = { title: 'Set up the helper', description: 'Run the free IngrainedCut helper on your computer to edit with AI — Claude, Codex or Cursor — using your own API key or account.' };
+export const metadata: Metadata = { title: 'Set up the helper', description: 'Install the free IngrainedCut helper to edit with ChatGPT on your ChatGPT plan.' };
 
 export default function DownloadPage() {
   return (
@@ -12,84 +12,46 @@ export default function DownloadPage() {
       <SiteHeader />
       <main className="prose">
         <h1>Set up the helper</h1>
-        <p className="updated">About two minutes. Windows, macOS and Linux.</p>
+        <p className="updated">About a minute.</p>
         <HelperStatus />
         <p>
-          The editor works on its own in your browser. The helper is optional: it runs your AI agent (Claude, Codex or Cursor) on your computer with your own
-          account, and adds transcription, silence and scene detection, and ProRes / GIF / MP3 export. Nothing is uploaded, and it only accepts connections from this
-          website.
+          The editor works on its own in your browser. The helper adds AI editing with ChatGPT, plus transcription, silence and scene detection, and ProRes /
+          GIF / MP3 export. It runs on your computer: nothing is uploaded, and it only accepts connections from this website.
         </p>
 
-        <h2>1. Install the requirements</h2>
-        <ul>
-          <li>
-            <b>Node.js 22 or newer</b> — <a href="https://nodejs.org/">nodejs.org</a>
-          </li>
-          <li>
-            <b>FFmpeg</b> is included. If you already have it on your PATH, the helper uses yours.
-          </li>
-          <li>
-            <b>Chrome or Edge</b> for the editor itself
-          </li>
-        </ul>
-
-        <h2>2. Start the helper</h2>
-        <p>Open a terminal and run:</p>
-        <div className="cmd">{HELPER_COMMAND}</div>
+        <h2>Windows</h2>
         <p>
-          The first run downloads it (a minute or two). Keep that window open while you edit, then click <b>Connect</b> in the editor (after the first time it connects by itself). Your browser will ask to let
-          this site access devices on your local network — allow it, so the editor can reach the helper on your computer.
+          <a className="btn primary" href={HELPER_DOWNLOAD} style={{ textDecoration: 'none' }}>
+            Download the helper for Windows
+          </a>
+        </p>
+        <p>
+          Run the installer. The helper starts right away, sits by the clock (IngrainedCut icon) and starts with Windows; right-click the icon to quit it or
+          turn that off. If Windows shows “Windows protected your PC”, click <b>More info</b> → <b>Run anyway</b>.
         </p>
 
-        <h2>3. Connect an AI agent (any one)</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Agent</th>
-              <th>Install</th>
-              <th>Set up</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Claude</td>
-              <td>
-                Your own Claude Code — the Claude desktop app, or <a href="https://docs.claude.com/en/docs/claude-code/setup">Claude Code</a> on its own
-              </td>
-              <td>
-                Built-in chat: add an Anthropic API key in the editor&apos;s Settings. Have a Claude plan? In the editor, open Help → Use your own Claude Code, Codex
-                or Cursor, run the command it shows once, then use Claude Code as usual.
-              </td>
-            </tr>
-            <tr>
-              <td>ChatGPT</td>
-              <td>Nothing to install</td>
-              <td>
-                Pick ChatGPT in the AI panel and click <b>Continue with ChatGPT</b>: the chat runs on your ChatGPT plan (Plus or Pro).
-              </td>
-            </tr>
-            <tr>
-              <td>Codex</td>
-              <td>Included with the helper</td>
-              <td>
-                Like ChatGPT, but it can also run commands and edit files. Continue with ChatGPT to use your plan, or add an OpenAI API key in Settings.
-              </td>
-            </tr>
-            <tr>
-              <td>Cursor</td>
-              <td>
-                Cursor CLI — see <a href="https://cursor.com/docs/cli/installation">cursor.com/docs/cli</a>
-              </td>
-              <td>In the editor: agent menu → Cursor → Sign in to Cursor (or <code className="inline">cursor-agent login</code>)</td>
-            </tr>
-          </tbody>
-        </table>
-        <p>Choose the agent from the model button at the top of the AI panel in the editor. Cursor keeps its tool settings in a <code className="inline">.cursor/mcp.json</code> inside your project folder. AI usage is billed by that provider: your ChatGPT plan when you continue with ChatGPT, API prices for the built-in chat on an API key, or your own plan when you connect your own app.</p>
+        <h2>macOS and Linux</h2>
+        <p>
+          Install <a href="https://nodejs.org/">Node.js 22 or newer</a>, then run this in a terminal and keep it open while you edit:
+        </p>
+        <div className="cmd">{HELPER_COMMAND}</div>
+
+        <h2>Then</h2>
+        <ol>
+          <li>
+            Open a project and click <b>Connect</b> in the editor (after the first time it connects by itself). Your browser will ask to let this site access devices
+            on your local network — allow it, so the editor can reach the helper on your computer.
+          </li>
+          <li>
+            In the AI panel, pick <b>ChatGPT</b> and click <b>Continue with ChatGPT</b>: the chat runs on your ChatGPT plan (Plus or Pro). Codex is there too, on
+            your ChatGPT plan or an OpenAI API key; it downloads itself the first time and needs Node.js.
+          </li>
+        </ol>
 
         <h2>Troubleshooting</h2>
         <ul>
           <li>
-            <b>Connect can’t find the helper</b> — make sure the terminal running the command above is still open, and that you allowed local network access
+            <b>Connect can’t find the helper</b> — make sure the helper is running (Windows: the IngrainedCut icon by the clock; macOS / Linux: the terminal with the command), and that you allowed local network access
             (site settings → Local network access).
           </li>
           <li>

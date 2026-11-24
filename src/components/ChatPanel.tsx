@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   useChat, sendMessage, stop, newChat, setModel, answerPermission, revertTurn, MODELS, EFFORTS, modelLabel, claudeModel, setDraft, setBypass, setMultiAgent,
-  attachChat, detachChat, continueChat, type ChatItem, PROVIDERS, setProvider, agentName, loadCatalog, type Provider,
+  attachChat, detachChat, continueChat, type ChatItem, PROVIDERS, AGENT_CHOICES, setProvider, agentName, loadCatalog, type Provider,
 } from '../chatStore';
 import { useEditor, setS } from '../store';
 import { sequenceDuration } from '../ops';
@@ -312,7 +312,7 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
   useEffect(() => {
     if (!open) return;
     loadCatalog(provider);
-    for (const p of PROVIDERS) {
+    for (const p of AGENT_CHOICES) {
       window.icut.providerStatus(p.id).then(
         (st) => setStatus((x) => ({ ...x, [p.id]: st })),
         () => setStatus((x) => ({ ...x, [p.id]: null })),
@@ -330,24 +330,32 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
       : provider === 'relay'
         ? [] // your own app uses its own model
         : [
-          {
-            id: '',
-            label: provider === 'cursor' ? 'Auto' : 'Default model',
-            desc: provider === 'cursor' ? 'Cursor picks the model' : provider === 'chatgpt' ? "ChatGPT's first model for your plan" : 'The model set in your Codex config',
-          },
+          ...(provider === 'chatgpt'
+            ? [] // ChatGPT: just the plan's own models (its first one is the default)
+            : [{ id: '', label: provider === 'cursor' ? 'Auto' : 'Default model', desc: provider === 'cursor' ? 'Cursor picks the model' : 'The model set in your Codex config' }]),
           ...(catalog ?? []),
         ];
-  const isOn = (m: { id: string }) => m.id === model || (provider === 'claude' && !!catalog?.length && claudeModel(model)?.id === m.id);
+  // ChatGPT with no model picked yet uses its plan's first model
+  const current = provider === 'chatgpt' && !model ? (catalog?.[0]?.id ?? '') : model;
+  const isOn = (m: { id: string }) => m.id === current || (provider === 'claude' && !!catalog?.length && claudeModel(model)?.id === m.id);
   const known = provider === 'relay' || list.some(isOn);
   // Codex: the reasoning levels the chosen model supports; Cursor has no effort setting
   const efforts =
     provider === 'claude'
       ? (claudeModel(model)?.efforts ?? EFFORTS.map((x) => x.id)).map((id) => EFFORTS.find((x) => x.id === id) ?? { id, desc: id })
       : provider === 'codex' || provider === 'chatgpt'
-        ? (catalog?.find((m) => m.id === model)?.efforts ?? ['low', 'medium', 'high', 'xhigh', 'max']).map((id) => EFFORTS.find((x) => x.id === id) ?? { id, desc: id })
+        ? (catalog?.find((m) => m.id === current)?.efforts?.length
+            ? catalog.find((m) => m.id === current)!.efforts!
+            : provider === 'chatgpt'
+              ? []
+              : ['low', 'medium', 'high', 'xhigh', 'max']
+          ).map((id) => EFFORTS.find((x) => x.id === id) ?? { id, desc: id })
         : [];
   const pick = (id: string) => {
-    setModel(id, effort);
+    // keep the effort when the new model supports it, else use that model's own default
+    const m = catalog?.find((x) => x.id === id);
+    const eff = !m?.efforts?.length || m.efforts.includes(effort) ? effort : (m.defaultEffort ?? m.efforts[0]);
+    setModel(id, eff);
     setOpen(false);
   };
   const statusText = (st: ProviderStatus | null | undefined) =>
@@ -370,7 +378,7 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
         <div className="model-pop" style={pos} onKeyDown={(e) => e.stopPropagation()}>
           <div className="mp-h">Agent</div>
           <div className="mp-providers">
-            {PROVIDERS.map((p) => (
+            {AGENT_CHOICES.map((p) => (
               <button key={p.id} className={'mp-provider' + (p.id === provider ? ' on' : '')} title={p.desc} onClick={() => setProvider(p.id)}>
                 <span className="mp-label">{p.name}</span>
                 <span className={'mp-desc' + (status[p.id] && !status[p.id]!.ready ? ' warn-text' : '')}>{statusText(status[p.id])}</span>
@@ -381,6 +389,7 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
           {provider !== 'claude' && provider !== 'relay' && cur && !cur.ready && <ProviderAuth provider={provider} compact />}
           {provider !== 'relay' && <div className="mp-h">Model</div>}
           {provider !== 'claude' && provider !== 'relay' && !catalog && <div className="ag-empty">Loading models…</div>}
+          {provider === 'chatgpt' && catalog && !catalog.length && <div className="ag-empty">Continue with ChatGPT above to see your plan's models.</div>}
           {list.map((m) => (
             <div key={m.id || 'default'} className={'mp-item' + (isOn(m) ? ' on' : '')} onClick={() => pick(m.id)}>
               <span className="mp-check">{isOn(m) && <Icon name="check" size={12} />}</span>
@@ -406,7 +415,8 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
               Show older models
             </button>
           )}
-          <div className="mp-custom" hidden={provider === 'relay'}>
+          {provider !== 'relay' && provider !== 'chatgpt' && (
+          <div className="mp-custom">
             <input
               placeholder={provider === 'claude' ? 'Custom model ID, e.g. claude-sonnet-5-5' : 'Custom model ID'}
               value={custom}
@@ -420,6 +430,7 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
               Use
             </button>
           </div>
+          )}
           {efforts.length > 0 && (
             <>
               <div className="mp-h">{provider === 'codex' || provider === 'chatgpt' ? 'Reasoning effort' : 'Effort'}</div>

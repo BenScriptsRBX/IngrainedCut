@@ -406,7 +406,8 @@ server.listen(port, '127.0.0.1', () => {
 /** First run: fetch the Claude Agent SDK and (without one on this computer) FFmpeg while the editor is already usable. */
 function prefetch() {
   const jobs = [];
-  if (!claudeSdkInstalled()) jobs.push(['the Claude Agent SDK', claudeSdk()]);
+  // (the Windows helper app has no Claude: the website offers ChatGPT and Codex)
+  if (!process.env.ICUT_HELPER_APP && !claudeSdkInstalled()) jobs.push(['the Claude Agent SDK', claudeSdk()]);
   const ff = ensureFfmpeg();
   if (ff) jobs.push(['FFmpeg', ff.then((ok) => ok || Promise.reject(new Error('install FFmpeg yourself, or try again later')))]);
   if (!jobs.length) return;

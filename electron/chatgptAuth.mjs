@@ -28,13 +28,21 @@ const random = (n = 32) => b64url(crypto.randomBytes(n));
 
 /** { hostId, account: { client_id, subject, email, issuer, id_token, access_token, refresh_token, expires_in, scopes, saved_at }, welcomeSeen } */
 let rec = null;
+let recTime = 0;
+// The desktop app and the helper can both be running and share this file: re-read it whenever the other one changed it
+// (a renewed sign-in replaces the refresh token, and the old one stops working).
 function load() {
-  if (rec) return rec;
+  let t = 0;
+  try {
+    t = fs.statSync(file()).mtimeMs;
+  } catch {}
+  if (rec && t === recTime) return rec;
   try {
     rec = JSON.parse(fs.readFileSync(file(), 'utf8'));
   } catch {
     rec = {};
   }
+  recTime = t;
   return rec;
 }
 function save() {
@@ -42,6 +50,7 @@ function save() {
   const tmp = file() + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(rec, null, 1), { mode: 0o600 });
   fs.renameSync(tmp, file());
+  recTime = fs.statSync(file()).mtimeMs;
 }
 /** one stable id per install ("agent host"), chosen before the first sign-in */
 function hostId() {
@@ -233,7 +242,7 @@ let refreshing = null;
 /** A valid access token for the ChatGPT plan (refreshed when it has under 10 minutes left), or null when not signed in. */
 export async function accessToken() {
   if (!planReady()) return null;
-  const a = rec.account;
+  const a = load().account;
   const expires = Date.parse(a.saved_at) + (a.expires_in ?? 3600) * 1000;
   if (expires - Date.now() > 10 * 60_000) return a.access_token;
   refreshing ??= (async () => {
@@ -250,6 +259,9 @@ export async function accessToken() {
       save();
       return rec.account.access_token;
     } catch (e) {
+      // the other app (desktop app / helper) renewed it a moment earlier: use its new sign-in instead of signing out
+      const now = load().account;
+      if (now?.refresh_token && now.refresh_token !== a.refresh_token) return now.access_token;
       if (TERMINAL.test(e.code ?? e.message)) {
         dropTokens();
         throw new Error('CHATGPT_SIGNED_OUT');

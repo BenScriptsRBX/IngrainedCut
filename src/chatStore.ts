@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Project } from './types';
 import { S, commit, toast, getAutosaveKey } from './store';
+import { isSite } from './webBridge';
 import { contextBlock } from './claudeTools';
 import { engine } from './engine';
 
@@ -53,6 +54,10 @@ export const PROVIDERS: { id: Provider; name: string; short: string; desc: strin
   { id: 'cursor', name: 'Cursor', short: 'Cursor', desc: 'Cursor Agent with your Cursor account' },
   { id: 'relay', name: 'Your own plan', short: 'Your app', desc: 'Your own Claude Code, Codex or Cursor session, running on your own subscription, taking prompts from here' },
 ];
+
+/** The agents this editor offers: the website offers ChatGPT and Codex only (no terminal commands, no Claude or Cursor). */
+export const AGENT_CHOICES = isSite ? PROVIDERS.filter((p) => p.id === 'chatgpt' || p.id === 'codex') : PROVIDERS;
+const offered = (p: string): p is Provider => AGENT_CHOICES.some((x) => x.id === p);
 
 /** settings keys holding each provider's model and effort (Cursor has no effort setting) */
 const MODEL_KEYS: Record<Provider, [string, string | null]> = { claude: ['model', 'effort'], chatgpt: ['chatgptModel', 'chatgptEffort'], codex: ['codexModel', 'codexEffort'], cursor: ['cursorModel', null], relay: ['relayModel', null] };
@@ -157,7 +162,8 @@ export const EFFORTS = [
 export function modelLabel(id: string, provider: Provider = C().provider) {
   if (provider === 'relay') return relayAppName();
   if (provider === 'claude') return claudeModel(id)?.label ?? MODELS.find((m) => m.id === id)?.label ?? id;
-  if (!id) return provider === 'cursor' ? 'Auto' : 'Default model';
+  // ChatGPT's default is the first model its plan lists: show that model's name
+  if (!id) return provider === 'cursor' ? 'Auto' : provider === 'chatgpt' ? (C().catalog.chatgpt?.[0]?.label ?? 'ChatGPT') : 'Default model';
   return C().catalog[provider]?.find((m) => m.id === id)?.label ?? id;
 }
 
@@ -176,7 +182,9 @@ export async function loadCatalog(p: Provider) {
 }
 
 function applyProviderSettings(st: any) {
-  const provider: Provider = PROVIDERS.some((p) => p.id === st.provider) ? st.provider : 'claude';
+  const provider: Provider = offered(st.provider) ? st.provider : AGENT_CHOICES[0].id;
+  // the website: an agent it doesn't offer (set up before) becomes ChatGPT, in the helper too
+  if (st.provider !== provider && isSite) window.icut.agentSetProvider(provider).catch(() => {});
   const [mk, ek] = MODEL_KEYS[provider];
   setC({ provider, model: st[mk] || (provider === 'claude' ? 'claude-opus-5-5' : ''), effort: (ek && st[ek]) || 'medium' });
 }

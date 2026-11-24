@@ -11,6 +11,8 @@ export function setPaths(p) {
 
 export function userDataDir() {
   if (override?.userData) return override.userData;
+  // a separate data folder (tests, or a second copy of the helper)
+  if (process.env.ICUT_USER_DATA) return process.env.ICUT_USER_DATA;
   const home = os.homedir();
   if (process.platform === 'win32') return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'IngrainedCut');
   if (process.platform === 'darwin') return path.join(home, 'Library', 'Application Support', 'IngrainedCut');

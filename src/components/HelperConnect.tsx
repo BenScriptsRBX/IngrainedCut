@@ -8,6 +8,19 @@ import { Icon } from './Icons';
 /** The one-line setup: npx runs the helper package straight from this website (no npm account needed). */
 export const HELPER_COMMAND = `npx -y ${SITE_ORIGIN}/helper/ingrainedcut-${__ICUT_VERSION__}.tgz`;
 
+/** Windows: the helper as an app with an installer (no command, no Node.js), from the latest GitHub release. */
+export const HELPER_DOWNLOAD = 'https://github.com/BenScriptsRBX/IngrainedCut/releases/latest/download/IngrainedCut-Helper-Setup.exe';
+export const isWindows = /Windows/i.test(navigator.userAgent);
+
+/** "Download for Windows": the helper installer. */
+export function DownloadHelper({ label = 'Download the helper for Windows' }: { label?: string }) {
+  return (
+    <a className="btn primary sm helper-download" href={HELPER_DOWNLOAD} download>
+      <Icon name="export" size={12} /> {label}
+    </a>
+  );
+}
+
 /** Apps people bring with their own plan; the helper's `--connect <app>` adds IngrainedCut to them (server/web.mjs). */
 export const MCP_APPS = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor' } as const;
 export type McpApp = keyof typeof MCP_APPS;
@@ -124,7 +137,7 @@ function ConnectButton() {
       </button>
       {state === 'missing' && (
         <div className="hint">
-          <span className="warn-text">Couldn't reach the helper — is the command still running?</span> If your browser asked about your local network and you
+          <span className="warn-text">{isWindows ? "Couldn't reach the helper — is it installed and running (IngrainedCut icon by the clock)?" : "Couldn't reach the helper — is the command still running?"}</span> If your browser asked about your local network and you
           didn't allow it, use this instead:
           <div>
             <OpenThroughHelper />
@@ -136,6 +149,18 @@ function ConnectButton() {
 }
 
 function Steps() {
+  if (isWindows)
+    return (
+      <ol className="helper-steps">
+        <li>
+          Install the IngrainedCut helper (free, about 120 MB). It runs quietly in the background and starts with Windows:
+          <div>
+            <DownloadHelper />
+          </div>
+        </li>
+        <li>Click Connect — after the first time, this page connects by itself. Your browser may ask to allow access to your local network — choose Allow.</li>
+      </ol>
+    );
   return (
     <ol className="helper-steps">
       <li>
@@ -151,6 +176,14 @@ function Steps() {
 export function HelperUpdateNotice() {
   const [app] = useMcpApp();
   if (!helperOutdated()) return null;
+  if (isSite && isWindows)
+    return (
+      <div className="auth-callout">
+        <b>Update the helper</b>
+        <div className="hint">It's on version {helperVersion()}. Install the new one over it:</div>
+        <DownloadHelper label="Download the new helper" />
+      </div>
+    );
   return (
     <div className="auth-callout">
       <b>Update the helper</b>
@@ -162,9 +195,40 @@ export function HelperUpdateNotice() {
   );
 }
 
-/** Replaces the chat while the editor runs without the helper: one command connects the user's own app and starts it. */
+/** Replaces the chat while the editor runs without the helper. The website: install the helper, connect, then
+ *  Continue with ChatGPT (no command on Windows). */
 export function HelperNeeded() {
   const [app, setApp] = useMcpApp();
+  if (isSite)
+    return (
+      <div className="helper-needed">
+        <div className="welcome-mark">
+          <Icon name="sparkle" size={28} />
+        </div>
+        <h3>Edit with ChatGPT</h3>
+        <ol className="helper-steps">
+          {isWindows ? (
+            <li>
+              Install the IngrainedCut helper (free). It runs in the background and starts with Windows:
+              <div>
+                <DownloadHelper />
+              </div>
+            </li>
+          ) : (
+            <li>
+              Run this in a terminal (needs <NodeLink />, free), and leave it open:
+              <CopyLine text={HELPER_COMMAND} />
+            </li>
+          )}
+          <li>
+            <ConnectButton />
+          </li>
+          <li>
+            Pick ChatGPT and click <b>Continue with ChatGPT</b>. The chat then runs on your ChatGPT plan.
+          </li>
+        </ol>
+      </div>
+    );
   return (
     <div className="helper-needed">
       <div className="welcome-mark">
@@ -238,7 +302,7 @@ export function HelperChip() {
             <>
               <p>
                 You're editing entirely in your browser. Imported media is kept in this browser's storage on this computer — nothing is uploaded. Connect the
-                helper to use AI agents (Claude, Codex, Cursor) and the extra tools.
+                helper to edit with ChatGPT and use the extra tools.
               </p>
               <Steps />
               <ConnectButton />

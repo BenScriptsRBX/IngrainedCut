@@ -3,7 +3,7 @@ import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
 import { HeroEditor } from '@/components/HeroEditor';
 import { Reveal } from '@/components/Reveal';
 import { SITE } from '@/lib/site';
-import { HELPER_COMMAND } from '@/lib/helper';
+import { HELPER_COMMAND, HELPER_DOWNLOAD } from '@/lib/helper';
 
 const I = {
   chat: <path d="M4 5h16v11H8l-4 4z" />,
@@ -34,19 +34,17 @@ const FEATURES = [
 ];
 
 const AGENTS = [
-  { name: 'Claude', by: 'Anthropic', points: ['Built-in chat on your Anthropic API key', 'Have a Claude plan? Connect your own Claude Code', 'Parallel sub-agents for big jobs'] },
   { name: 'ChatGPT', by: 'OpenAI', points: ['Continue with ChatGPT: runs on your ChatGPT plan', 'Nothing extra to install', 'Same editing tools, same timeline'] },
   { name: 'Codex', by: 'OpenAI', points: ['On your ChatGPT plan or OpenAI API key', 'Can also run commands and edit files', 'Runs in a sandbox you control'] },
-  { name: 'Cursor', by: 'Anysphere', points: ['Use your Cursor subscription', 'Pick any model your plan includes', 'Same editing tools, same timeline'] },
 ];
 
 const FAQ = [
   { q: 'Does my footage get uploaded?', a: 'No. Media you import stays on your computer — in your browser’s private storage, or on your disk when the helper is running. Only the project timeline (clip positions, effects, titles — no video) is saved to your account so you can reopen it.' },
-  { q: 'Do I need to install anything?', a: 'Not to edit: import, cut, add titles and effects, and export all run in your browser. To edit with AI, run the free IngrainedCut helper on your computer with one command — Claude, Codex or Cursor then run locally with your own API key or account. The helper also adds transcription, silence and scene detection, and ProRes / GIF / MP3 export.' },
-  { q: 'Which AI do I need?', a: 'Any one of Claude, ChatGPT, Codex or Cursor. Have ChatGPT Plus or Pro? Pick ChatGPT, click Continue with ChatGPT, and the chat runs on your ChatGPT plan. The built-in chat also runs Claude or Codex on your own API key, and Cursor on your Cursor account. Already pay for Claude? Connect your own Claude Code to IngrainedCut and it edits your timeline on your plan. IngrainedCut does not resell AI access; usage is billed by the provider under their terms.' },
+  { q: 'Do I need to install anything?', a: 'Not to edit: import, cut, add titles and effects, and export all run in your browser. To edit with AI, install the free IngrainedCut helper (a normal Windows installer; on macOS and Linux, one command) — ChatGPT then edits your timeline on your ChatGPT plan. The helper also adds transcription, silence and scene detection, and ProRes / GIF / MP3 export.' },
+  { q: 'Which AI do I need?', a: 'ChatGPT Plus or Pro. Pick ChatGPT, click Continue with ChatGPT, and the chat runs on your ChatGPT plan. Codex works too, on your ChatGPT plan or an OpenAI API key. IngrainedCut does not resell AI access; usage counts toward your plan under OpenAI’s terms.' },
   { q: 'Can the AI change things on my computer?', a: 'Editing actions are always allowed. Anything else — like running a shell command — asks you first unless you switch on “Bypass permissions” for that session.' },
   { q: 'Which browsers are supported?', a: 'Chrome and Edge on Windows, macOS and Linux. They have the video decoding and encoding features the editor relies on.' },
-  { q: 'How much does it cost?', a: 'IngrainedCut is free. You pay your AI provider for AI usage: your ChatGPT plan when you continue with ChatGPT, API prices for the built-in Claude and Codex chat on an API key, or your existing plan when you connect your own Claude Code, Codex or Cursor.' },
+  { q: 'How much does it cost?', a: 'IngrainedCut is free. AI usage comes from your ChatGPT plan when you continue with ChatGPT, or is billed by OpenAI at API prices if you use Codex with an API key.' },
 ];
 
 export default function Home() {
@@ -57,7 +55,7 @@ export default function Home() {
         <section className="hero">
           <div className="hero-glow" />
           <div className="container" style={{ position: 'relative' }}>
-            <span className="eyebrow">● Early access · works with Claude, ChatGPT, Codex & Cursor</span>
+            <span className="eyebrow">● Early access · works with ChatGPT</span>
             <h1>
               The video editor
               <br />
@@ -124,7 +122,13 @@ export default function Home() {
                 <div className="step">
                   <div>
                     <h3>Add AI with the helper</h3>
-                    <p>One command on Windows, macOS or Linux, then pick Claude, Codex or Cursor and describe the edit you want:</p>
+                    <p>Install the free helper, pick ChatGPT and click Continue with ChatGPT, then describe the edit you want.</p>
+                    <p>
+                      <a className="btn primary" href={HELPER_DOWNLOAD} style={{ textDecoration: 'none' }}>
+                        Download for Windows
+                      </a>
+                    </p>
+                    <p className="muted" style={{ fontSize: 13 }}>macOS or Linux: run this in a terminal (needs Node.js 22+):</p>
                     <div className="cmd">{HELPER_COMMAND}</div>
                   </div>
                 </div>
@@ -161,7 +165,7 @@ export default function Home() {
               ))}
             </div>
             <p className="muted" style={{ fontSize: 13, marginTop: 18 }}>
-              AI usage runs on your own API key or account with each provider and is subject to their terms and pricing. Claude Code, Codex and Cursor can also connect to the editor themselves (MCP).
+              AI usage runs on your own ChatGPT plan (or OpenAI API key) and is subject to OpenAI’s terms.
             </p>
           </div>
         </section>

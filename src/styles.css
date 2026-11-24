@@ -593,3 +593,5 @@ a.logo { text-decoration: none; }
 .btn.chatgpt-btn:hover { background: #222; }
 .plan-pill { font-size: 10.5px; padding: 1px 8px; border-radius: 9px; background: #1f3328; color: #8fd6a8; }
 .plan-badge { font-size: 10.5px; color: var(--dim); white-space: nowrap; margin-left: 6px; }
+
+.btn.helper-download { display: inline-flex; margin: 6px 0; text-decoration: none; }

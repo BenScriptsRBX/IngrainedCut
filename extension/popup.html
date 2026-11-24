@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>IngrainedCut</title>
+<style>
+  body { font: 13px/1.45 system-ui, sans-serif; background: #161616; color: #ddd; width: 270px; margin: 0; padding: 14px; }
+  h1 { font-size: 15px; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+  p { margin: 0 0 10px; color: #aaa; }
+  b { color: #eee; }
+  button { display: block; width: 100%; margin-top: 6px; padding: 7px; border-radius: 6px; border: 1px solid #333; background: #232323; color: #eee; cursor: pointer; font: inherit; }
+  button.primary { background: #2d6cdf; border-color: #2d6cdf; color: #fff; }
+  button:hover { filter: brightness(1.15); }
+</style>
+<h1><img src="icons/icon32.png" width="20" height="20" alt="" />IngrainedCut</h1>
+<p id="st">…</p>
+<button class="primary" id="open">Open the editor</button>
+<button id="out" hidden>Sign out of ChatGPT</button>
+<script src="popup.js"></script>

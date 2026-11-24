@@ -4,6 +4,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import { SITE_ORIGIN, connectHelper, engineMode, helperOutdated, helperReachable, helperVersion, helperWasUsed, isSite } from '../webBridge';
 import { S, toast } from '../store';
 import { Icon } from './Icons';
+import { EXTENSION_STORE } from '../chatgptExtension';
+
+/** Chrome, Edge, Brave, Opera…: browsers that can add the IngrainedCut extension. */
+export const isChromium = !!(navigator as any).userAgentData?.brands?.some((b: any) => /Chromium/.test(b.brand));
+
+/** "Add the extension": the Chrome Web Store page once listed, until then the setup page on the website. */
+export function GetExtension({ label = 'Add the IngrainedCut extension' }: { label?: string }) {
+  const url = EXTENSION_STORE || `${SITE_ORIGIN}/download#extension`;
+  return (
+    <a className="btn primary sm helper-download" href={url} target="_blank" rel="noopener noreferrer">
+      <Icon name="sparkle" size={12} /> {label}
+    </a>
+  );
+}
 
 /** The one-line setup: npx runs the helper package straight from this website (no npm account needed). */
 export const HELPER_COMMAND = `npx -y ${SITE_ORIGIN}/helper/ingrainedcut-${__ICUT_VERSION__}.tgz`;
@@ -226,6 +240,24 @@ export function HelperNeeded() {
           <Icon name="sparkle" size={28} />
         </div>
         <h3>Edit with ChatGPT</h3>
+        {isChromium && (
+          <>
+            <ol className="helper-steps">
+              <li>
+                Add the free IngrainedCut extension to this browser, then reload this page:
+                <div>
+                  <GetExtension />
+                </div>
+              </li>
+              <li>
+                Pick ChatGPT and click <b>Continue with ChatGPT</b>. The chat then runs on your ChatGPT plan, right here in the browser.
+              </li>
+            </ol>
+            <p className="hint">
+              For transcription, captions from speech, and silence and scene detection, set up the helper on your computer:
+            </p>
+          </>
+        )}
         <ol className="helper-steps">
           {isWindows ? (
             <li>

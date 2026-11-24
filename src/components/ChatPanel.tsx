@@ -10,6 +10,7 @@ import { Icon } from './Icons';
 import { AuthBox, ProviderAuth } from './Dialogs';
 import { HelperNeeded, HelperUpdateNotice, MCP_APPS, useMcpApp } from './HelperConnect';
 import { isBrowserEngine } from '../webBridge';
+import { hasExtension } from '../chatgptExtension';
 
 const SUGGESTIONS = [
   'Remove the silences and dead air from my clips',
@@ -132,7 +133,8 @@ export function ChatPanel() {
   };
 
   const dur = sequenceDuration(project);
-  if (isBrowserEngine())
+  // in the browser without the helper, the chat runs with the IngrainedCut extension (ChatGPT); without it, how to get one
+  if (isBrowserEngine() && !hasExtension())
     return (
       <div className="chat">
         <div className="chat-head">
@@ -165,7 +167,7 @@ export function ChatPanel() {
         <AgentsIndicator />
         <span className="grow" />
         <ModelPicker model={model} effort={effort} provider={provider} />
-        {(provider === 'chatgpt' || provider === 'codex') && <PlanBadge />}
+        {(provider === 'chatgpt' || provider === 'codex') && <PlanBadge provider={provider} />}
         <PastChats />
         <button className="icon-btn" title="New conversation" onClick={newChat}>
           <Icon name="newchat" size={15} />
@@ -700,10 +702,10 @@ function RelaySetup() {
 }
 
 /** "Using ChatGPT plan · Manage usage" next to the model picker while Codex runs on the user's ChatGPT plan. */
-function PlanBadge() {
+function PlanBadge({ provider }: { provider: 'chatgpt' | 'codex' }) {
   const busy = useChat((s) => s.busy);
   const [plan, setPlan] = useState(false);
-  useEffect(() => void window.icut.providerStatus('codex').then((s) => setPlan(!!s.chatgpt?.plan), () => setPlan(false)), [busy]);
+  useEffect(() => void window.icut.providerStatus(provider).then((s) => setPlan(!!s.chatgpt?.plan), () => setPlan(false)), [busy, provider]);
   if (!plan) return null;
   return (
     <span className="plan-badge" title="Codex runs on your ChatGPT plan">

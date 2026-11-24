@@ -30,7 +30,8 @@ export async function loadCloudProject(): Promise<'ok' | 'notfound'> {
   const switched = await pickCopies(p);
   const moved = engineMode() === 'helper' ? await moveBrowserMedia(p) : 0;
   for (const m of p.media) m.status = (await window.icut.exists(m.path)) ? 'loading' : 'missing';
-  loadProjectState(p);
+  // keyed by the account project, so its chat (and autosaves) come back when it is opened again
+  loadProjectState(p, { autosaveKey: 'cloud-' + id });
   setS({ cloud: { id, status: 'saved' } });
   engine.seek(0);
   for (const m of p.media) if (m.status !== 'missing') window.icut.refreshAssets({ id: m.id, path: m.path, info: m });

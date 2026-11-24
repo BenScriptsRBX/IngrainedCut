@@ -63,6 +63,9 @@ export function ProjectsClient({ initial, firstName }: { initial: P[]; firstName
   const [creating, setCreating] = useState(false);
   const helper = useHelper();
   const router = useRouter();
+  // the IngrainedCut extension marks the page (<html data-icut-extension>)
+  const [ext, setExt] = useState(false);
+  useEffect(() => setExt(!!document.documentElement.getAttribute('data-icut-extension')), []);
 
   const open = (id: string) => (location.href = `/editor/?project=${encodeURIComponent(id)}`);
 
@@ -96,14 +99,21 @@ export function ProjectsClient({ initial, firstName }: { initial: P[]; firstName
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Link
-            href="/download"
-            className={`helper-pill ${helper === 'on' ? 'on' : helper === 'off' ? 'off' : ''}`}
-            title="Optional: the helper runs the AI agents on your computer"
-          >
-            <span className="d" />
-            {helper === 'on' ? 'AI helper connected' : helper === 'off' ? 'AI helper not running' : helper === 'unused' ? 'Add AI with the helper' : 'Looking for helper…'}
-          </Link>
+          {ext && helper !== 'on' ? (
+            <Link href="/download" className="helper-pill on" title="The IngrainedCut extension runs ChatGPT in this browser">
+              <span className="d" />
+              ChatGPT ready in this browser
+            </Link>
+          ) : (
+            <Link
+              href="/download"
+              className={`helper-pill ${helper === 'on' ? 'on' : helper === 'off' ? 'off' : ''}`}
+              title="Optional: the extension or the helper adds AI editing"
+            >
+              <span className="d" />
+              {helper === 'on' ? 'AI helper connected' : helper === 'off' ? 'AI helper not running' : helper === 'unused' ? 'Set up AI editing' : 'Looking for helper…'}
+            </Link>
+          )}
           <button className="btn primary sm" onClick={create} disabled={creating}>
             {creating ? 'Creating…' : '+ New project'}
           </button>

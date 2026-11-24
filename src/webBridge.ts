@@ -98,6 +98,11 @@ export const helperWasUsed = mayLookForHelper;
 
 let connectWs: (() => Promise<void>) | null = null;
 
+let engineChosen: () => void = () => {};
+const chosen = new Promise<void>((r) => (engineChosen = r));
+/** Resolves once the website editor knows whether it runs on the helper or in the browser (right away elsewhere). */
+export const engineReady = () => (isSite ? chosen : Promise.resolve());
+
 /** Website: decide once at load which engine to use (the helper if it's running and allowed, else the browser). */
 export async function chooseEngine(): Promise<EngineMode> {
   if (!isSite) return mode;
@@ -108,10 +113,12 @@ export async function chooseEngine(): Promise<EngineMode> {
       try {
         localStorage.setItem(HELPER_USED, '1');
       } catch {}
+      engineChosen();
       return mode;
     } catch {}
   }
   mode = 'browser';
+  engineChosen();
   return mode;
 }
 

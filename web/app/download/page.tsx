@@ -2,24 +2,65 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
 import { HelperStatus } from './HelperStatus';
-import { HELPER_COMMAND, HELPER_DOWNLOAD } from '@/lib/helper';
+import { ExtensionStatus } from './ExtensionStatus';
+import { EXTENSION_STORE, EXTENSION_ZIP, HELPER_COMMAND, HELPER_DOWNLOAD } from '@/lib/helper';
 
-export const metadata: Metadata = { title: 'Set up the helper', description: 'Install the free IngrainedCut helper to edit with ChatGPT on your ChatGPT plan.' };
+export const metadata: Metadata = { title: 'Set up AI editing', description: 'Add the free IngrainedCut extension or helper to edit with ChatGPT on your ChatGPT plan.' };
 
 export default function DownloadPage() {
   return (
     <>
       <SiteHeader />
       <main className="prose">
-        <h1>Set up the helper</h1>
+        <h1>Set up AI editing</h1>
         <p className="updated">About a minute.</p>
-        <HelperStatus />
         <p>
-          The editor works on its own in your browser. The helper adds AI editing with ChatGPT, plus transcription, silence and scene detection, and ProRes /
-          GIF / MP3 export. It runs on your computer: nothing is uploaded, and it only accepts connections from this website.
+          The editor works on its own in your browser. To edit with ChatGPT on your ChatGPT plan (Plus or Pro), add the IngrainedCut extension to your
+          browser. For transcription, captions from speech, silence and scene detection, and ProRes / GIF / MP3 export, set up the helper on your computer
+          instead (it includes ChatGPT too).
         </p>
 
-        <h2>Windows</h2>
+        <h2 id="extension">Chrome, Edge or Brave: the extension</h2>
+        <ExtensionStatus />
+        {EXTENSION_STORE ? (
+          <p>
+            <a className="btn primary" href={EXTENSION_STORE} style={{ textDecoration: 'none' }}>
+              Add to Chrome
+            </a>
+          </p>
+        ) : (
+          <>
+            <p>
+              <a className="btn primary" href={EXTENSION_ZIP} style={{ textDecoration: 'none' }}>
+                Download the extension
+              </a>
+            </p>
+            <p>It isn’t on the Chrome Web Store yet, so it takes a few more clicks for now:</p>
+            <ol>
+              <li>Unzip the download.</li>
+              <li>
+                Open <code className="inline">chrome://extensions</code> (Edge: <code className="inline">edge://extensions</code>) and turn on{' '}
+                <b>Developer mode</b>.
+              </li>
+              <li>
+                Click <b>Load unpacked</b> and pick the unzipped <b>IngrainedCut-Chrome-Extension</b> folder. Keep the folder where it is.
+              </li>
+            </ol>
+          </>
+        )}
+        <p>
+          Then open the editor (reload it if it was open), pick <b>ChatGPT</b> in the AI panel and click <b>Continue with ChatGPT</b>. Your ChatGPT sign-in
+          stays in the extension in your browser and goes only to OpenAI; the chat edits your timeline right in the page.
+        </p>
+
+        <h2>The helper</h2>
+        <HelperStatus />
+        <p>
+          The helper runs on your computer: nothing is uploaded, and it only accepts connections from this website. It adds the tools that need FFmpeg and
+          Whisper, and runs ChatGPT and Codex itself.
+        </p>
+
+        <h3>Windows</h3>
         <p>
           <a className="btn primary" href={HELPER_DOWNLOAD} style={{ textDecoration: 'none' }}>
             Download the helper for Windows
@@ -31,13 +72,13 @@ export default function DownloadPage() {
           with Windows. If Windows shows “Windows protected your PC” while installing, click <b>More info</b> → <b>Run anyway</b>.
         </p>
 
-        <h2>macOS and Linux</h2>
+        <h3>macOS and Linux</h3>
         <p>
           Install <a href="https://nodejs.org/">Node.js 22 or newer</a>, then run this in a terminal and keep it open while you edit:
         </p>
         <div className="cmd">{HELPER_COMMAND}</div>
 
-        <h2>Then</h2>
+        <h3>Then</h3>
         <ol>
           <li>
             Open a project and click <b>Connect</b> in the editor (after the first time it connects by itself). Your browser will ask to let this site access devices

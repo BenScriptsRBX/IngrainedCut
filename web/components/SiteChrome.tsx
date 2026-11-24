@@ -21,7 +21,7 @@ export function SiteHeader() {
           <Link href="/#how">How it works</Link>
           <Link href="/#agents">AI agents</Link>
           <Link href="/#privacy">Privacy</Link>
-          <Link href="/download">Helper</Link>
+          <Link href="/download">Set up AI</Link>
         </nav>
         <div className="header-right">
           <HeaderAuth />
@@ -44,7 +44,7 @@ export function SiteFooter() {
             <h4>Product</h4>
             <Link href="/#features">Features</Link>
             <Link href="/#agents">AI agents</Link>
-            <Link href="/download">Download the helper</Link>
+            <Link href="/download">Set up AI</Link>
             <Link href="/projects">Your projects</Link>
           </div>
           <div>

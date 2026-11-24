@@ -3,7 +3,7 @@ import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
 import { HeroEditor } from '@/components/HeroEditor';
 import { Reveal } from '@/components/Reveal';
 import { SITE } from '@/lib/site';
-import { HELPER_COMMAND, HELPER_DOWNLOAD } from '@/lib/helper';
+import { EXTENSION_STORE } from '@/lib/helper';
 
 const I = {
   chat: <path d="M4 5h16v11H8l-4 4z" />,
@@ -40,7 +40,7 @@ const AGENTS = [
 
 const FAQ = [
   { q: 'Does my footage get uploaded?', a: 'No. Media you import stays on your computer — in your browser’s private storage, or on your disk when the helper is running. Only the project timeline (clip positions, effects, titles — no video) is saved to your account so you can reopen it.' },
-  { q: 'Do I need to install anything?', a: 'Not to edit: import, cut, add titles and effects, and export all run in your browser. To edit with AI, install the free IngrainedCut helper (a normal Windows installer; on macOS and Linux, one command) — ChatGPT then edits your timeline on your ChatGPT plan. The helper also adds transcription, silence and scene detection, and ProRes / GIF / MP3 export.' },
+  { q: 'Do I need to install anything?', a: 'Not to edit: import, cut, add titles and effects, and export all run in your browser. To edit with AI, add the free IngrainedCut extension to Chrome, Edge or Brave — ChatGPT then edits your timeline on your ChatGPT plan, right in the browser. For transcription, silence and scene detection, and ProRes / GIF / MP3 export, install the free helper on your computer.' },
   { q: 'Which AI do I need?', a: 'ChatGPT Plus or Pro. Pick ChatGPT, click Continue with ChatGPT, and the chat runs on your ChatGPT plan. Codex works too, on your ChatGPT plan or an OpenAI API key. IngrainedCut does not resell AI access; usage counts toward your plan under OpenAI’s terms.' },
   { q: 'Can the AI change things on my computer?', a: 'Editing actions are always allowed. Anything else — like running a shell command — asks you first unless you switch on “Bypass permissions” for that session.' },
   { q: 'Which browsers are supported?', a: 'Chrome and Edge on Windows, macOS and Linux. They have the video decoding and encoding features the editor relies on.' },
@@ -102,7 +102,7 @@ export default function Home() {
               <span className="eyebrow">How it works</span>
               <h2 style={{ fontSize: 'clamp(30px,4vw,44px)', letterSpacing: '-0.03em', lineHeight: 1.1, margin: '14px 0 10px' }}>Three steps to your first AI edit.</h2>
               <p className="muted" style={{ fontSize: 18 }}>
-                The editor runs in your browser — nothing is uploaded. Add the free helper when you want AI: your agent runs on your own computer.
+                The editor runs in your browser — nothing is uploaded. Add the free extension when you want AI: ChatGPT edits on your own ChatGPT plan.
               </p>
             </Reveal>
             <Reveal delay={120}>
@@ -121,15 +121,16 @@ export default function Home() {
                 </div>
                 <div className="step">
                   <div>
-                    <h3>Add AI with the helper</h3>
-                    <p>Install the free helper, pick ChatGPT and click Continue with ChatGPT, then describe the edit you want.</p>
+                    <h3>Add AI with the extension</h3>
+                    <p>Add the free IngrainedCut extension to Chrome, Edge or Brave, pick ChatGPT and click Continue with ChatGPT, then describe the edit you want.</p>
                     <p>
-                      <a className="btn primary" href={HELPER_DOWNLOAD} style={{ textDecoration: 'none' }}>
-                        Download for Windows
+                      <a className="btn primary" href={EXTENSION_STORE || '/download#extension'} style={{ textDecoration: 'none' }}>
+                        Get the extension
                       </a>
                     </p>
-                    <p className="muted" style={{ fontSize: 13 }}>macOS or Linux: run this in a terminal (needs Node.js 22+):</p>
-                    <div className="cmd">{HELPER_COMMAND}</div>
+                    <p className="muted" style={{ fontSize: 13 }}>
+                      Other browsers, or transcription and silence detection: <Link href="/download">set up the helper</Link>.
+                    </p>
                   </div>
                 </div>
               </div>

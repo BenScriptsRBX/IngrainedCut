@@ -96,7 +96,7 @@ export default function Privacy() {
         </table>
         <p>
           <b>What we do not collect:</b> your media files (video, audio, images), exported videos, the contents of your conversations with AI agents, or your AI
-          provider credentials. The helper keeps these on your computer and talks to AI providers directly.
+          provider credentials. The helper and the IngrainedCut browser extension keep these on your computer and talk to AI providers directly.
         </p>
 
         <h2>3. AI providers</h2>
@@ -112,6 +112,13 @@ export default function Privacy() {
           ChatGPT and Codex requests. It never passes through our servers. Signing out in the editor revokes it with OpenAI; you can also disconnect IngrainedCut in your
           ChatGPT settings (Security → Login connections). OpenAI shares your name, email and profile picture with the app for the sign-in; it does not share
           your ChatGPT conversations or memories.
+        </p>
+        <p>
+          With the <b>IngrainedCut browser extension</b> instead of the helper, the same sign-in happens in a new browser tab, and the token is kept in the
+          extension’s own storage in your browser. The extension sends it only to OpenAI, with the ChatGPT requests the editor makes; the page itself never sees
+          it. Each request carries your prompt, the text description of your timeline and, if you choose, frames from your edit. The conversation is kept in your
+          browser’s storage so a project’s chat can continue later. The extension runs only on ingrainedcut.com, collects nothing for us, and nothing it handles
+          passes through our servers. Removing the extension deletes its stored sign-in; sign out first to also revoke it with OpenAI.
         </p>
         <p>
           If you connect your own Claude Code, Codex or Cursor (“your own app”), what you type in the editor’s chat panel goes from the helper on your computer to

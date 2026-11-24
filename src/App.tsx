@@ -17,6 +17,7 @@ import { ColorPanel } from './components/ColorPanel';
 import { Dialogs } from './components/Dialogs';
 import { ContextMenuHost } from './components/ContextMenu';
 import { isSite, isBrowserEngine } from './webBridge';
+import { hasExtension } from './chatgptExtension';
 import { HelperChip } from './components/HelperConnect';
 import { AdBar } from './components/AdBar';
 import { StartPage } from './components/StartPage';
@@ -166,7 +167,7 @@ function StatusBar() {
       {last && <span className="dim">Last: {last}</span>}
       <span className={'st-claude' + (busy ? ' busy' : '')}>
         <Icon name="sparkle" size={10} />{' '}
-        {isBrowserEngine() ? 'AI: connect the helper' : busy ? `${name} is editing…` : info ? `${name} ready · ${info.model ?? ''}` : `${name} idle`}
+        {isBrowserEngine() && !hasExtension() ? 'AI: add the extension or connect the helper' : busy ? `${name} is editing…` : info ? `${name} ready · ${info.model ?? ''}` : `${name} idle`}
       </span>
     </div>
   );

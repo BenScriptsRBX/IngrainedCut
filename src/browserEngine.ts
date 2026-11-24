@@ -1,8 +1,11 @@
 // The editor's engine inside the browser, used by the website when the helper isn't running on this computer.
 // Imported media is copied into the browser's private storage (OPFS) and read with mediabunny; thumbnails,
 // filmstrips and waveforms are made here; exports and project copies are saved as files the user picks.
-// The AI agents need the helper (they run on the user's computer), so those channels report that instead.
+// The AI agents need the helper (they run on the user's computer), so those channels report that instead, except
+// ChatGPT when the IngrainedCut Chrome extension is installed: then the chat runs right here (browserChatGpt.ts).
 import { ALL_FORMATS, AudioBufferSink, BlobSource, CanvasSink, Input } from 'mediabunny';
+import { extCall, hasExtension } from './chatgptExtension';
+import type { BrowserChatGpt } from './browserChatGpt';
 
 /** Paths of media kept in browser storage: browser:/media/<uid>/<name>, cache files under browser:/cache/. */
 export const BROWSER_PREFIX = 'browser:/';
@@ -305,12 +308,56 @@ function setSettings(patch: any) {
 }
 
 export const NEEDS_HELPER = 'AI agents and this feature run on your computer through the IngrainedCut helper. Start it, then click Connect in the editor.';
+const CODEX_NEEDS_HELPER = 'Codex runs on your computer through the IngrainedCut helper. In the browser, pick ChatGPT instead (it runs on your ChatGPT plan through the IngrainedCut extension).';
+/** settings keys holding each provider's model and effort */
+const MODEL_KEYS: Record<string, [string, string | null]> = { claude: ['model', 'effort'], chatgpt: ['chatgptModel', 'chatgptEffort'], codex: ['codexModel', 'codexEffort'] };
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- the channel handlers ----------
 type Emit = (ch: string, payload: any) => void;
 
 export function createBrowserEngine(emit: Emit) {
   const toast = (message: string) => emit('app:toast', { message });
+
+  // ---- the ChatGPT chat, through the IngrainedCut extension ----
+  // editor tools the model calls run in this page (claudeTools.ts answers tool:invoke with tool:result)
+  let toolSeq = 0;
+  const pendingTools = new Map<number, (r: any) => void>();
+  const dispatch = (name: string, args: any) =>
+    new Promise<any>((resolve) => {
+      const id = ++toolSeq;
+      pendingTools.set(id, resolve);
+      emit('tool:invoke', { id, name, args });
+    });
+  let agentP: Promise<BrowserChatGpt> | null = null;
+  const agent = () => (agentP ??= import('./browserChatGpt').then((m) => new m.BrowserChatGpt({ emit, dispatch, getSettings })));
+  const chatgptStatus = async () => {
+    const g = await extCall('status');
+    return { installed: true, loggedIn: g.signedIn, email: g.email ?? undefined, method: g.plan ? 'ChatGPT plan' : undefined, apiKey: false, ready: g.plan, chatgpt: g };
+  };
+  const helperOnly = { installed: false, loggedIn: false, apiKey: false, ready: false, error: NEEDS_HELPER };
+  let signingIn = false;
+  async function chatgptSignIn() {
+    signingIn = true;
+    try {
+      await extCall('signIn');
+      // the sign-in finishes in its own tab; the extension keeps the result
+      for (let i = 0; i < 600 && signingIn; i++) {
+        await sleep(1000);
+        const st = await extCall('status').catch(() => null);
+        if (st && !st.signingIn) {
+          if (st.plan) (await agent()).reset();
+          return st.lastResult ?? { ok: st.plan, out: st.plan ? 'Signed in' : 'Sign-in did not complete' };
+        }
+      }
+      return { ok: false, out: signingIn ? 'Sign-in timed out. Try again.' : 'Sign-in cancelled' };
+    } catch (e: any) {
+      return { ok: false, out: e?.message || String(e) };
+    } finally {
+      signingIn = false;
+    }
+  }
+  const CHATS = 'icut-chats:';
 
   async function processAssets(id: string, path: string, info: any) {
     try {
@@ -378,20 +425,60 @@ export function createBrowserEngine(emit: Emit) {
     'app:info': () => ({ version: 'web', mcpServerPath: '', bridgeFile: '', ffmpegOk: false, userData: "This browser's storage", documents: '', startupProject: null }),
     'shell:reveal': () => toast('Saved to your downloads'),
     'shell:open-external': (url: string) => void window.open(url, '_blank', 'noopener'),
-    // AI and engine-only features run on the user's computer
-    'agent:send': () => {
-      emit('agent:event', { type: 'error', message: NEEDS_HELPER });
-      emit('agent:event', { type: 'idle' });
+    // AI: ChatGPT runs here with the IngrainedCut extension; the other agents and engine-only features need the helper
+    'agent:send': async (payload: any) => {
+      const p = getSettings().provider;
+      if (!hasExtension() || p !== 'chatgpt') {
+        emit('agent:event', { type: 'error', message: hasExtension() && p === 'codex' ? CODEX_NEEDS_HELPER : NEEDS_HELPER });
+        emit('agent:event', { type: 'idle' });
+        return;
+      }
+      (await agent()).send(payload);
     },
-    'agent:interrupt': () => {},
-    'agent:reset': () => emit('agent:event', { type: 'idle' }),
-    'agent:set-model': ({ model, effort }: any) => void setSettings({ model, effort }),
+    'agent:interrupt': async () => agentP && (await agentP).interrupt(),
+    'agent:reset': async () => (agentP ? (await agentP).reset() : emit('agent:event', { type: 'idle' })),
+    'agent:set-model': ({ model, effort }: any) => {
+      const [mk, ek] = MODEL_KEYS[getSettings().provider] ?? MODEL_KEYS.claude;
+      setSettings({ [mk]: model, ...(ek ? { [ek]: effort } : {}) });
+    },
     'agent:set-bypass': (on: boolean) => void setSettings({ autoApproveAll: !!on }),
-    'agent:set-provider': (p: string) => setSettings({ provider: p }),
-    'providers:status': () => ({ installed: false, loggedIn: false, apiKey: false, ready: false, error: NEEDS_HELPER }),
-    'providers:models': () => [],
-    'providers:login': () => ({ ok: false, out: NEEDS_HELPER }),
-    'providers:cancel-login': () => {},
+    'agent:set-provider': async (p: string) => {
+      if (p !== getSettings().provider && agentP) (await agentP).reset();
+      return setSettings({ provider: p });
+    },
+    'providers:status': (p: string) => (p === 'chatgpt' && hasExtension() ? chatgptStatus() : p === 'codex' && hasExtension() ? { ...helperOnly, error: CODEX_NEEDS_HELPER } : helperOnly),
+    'providers:models': (p: string) => (p === 'chatgpt' && hasExtension() ? extCall('models').catch(() => []) : []),
+    'providers:login': (p: string) => (p === 'chatgpt' && hasExtension() ? chatgptSignIn() : { ok: false, out: NEEDS_HELPER }),
+    'providers:cancel-login': () => {
+      signingIn = false;
+      if (hasExtension()) return extCall('cancelSignIn').catch(() => {});
+    },
+    'chatgpt:sign-out': async () => {
+      const st = await extCall('signOut');
+      if (agentP) (await agentP).reset();
+      return st;
+    },
+    'chatgpt:welcome-seen': () => extCall('welcomeSeen').catch(() => {}),
+    // each project's chat, kept in this browser
+    'chat:save': async ({ path, key, chat }: any) => {
+      const k = path || key;
+      if (!k) return false;
+      const { kvSet } = await import('./browserChatGpt');
+      await kvSet(CHATS + k, { ...chat, savedAt: Date.now() });
+      return true;
+    },
+    'chat:load': async ({ path, key }: any) => {
+      const k = path || key;
+      if (!k) return null;
+      const { kvGet } = await import('./browserChatGpt');
+      return (await kvGet(CHATS + k).catch(() => null)) ?? null;
+    },
+    'chat:resume': async ({ provider: p, sessionId }: any) => {
+      if (p !== 'chatgpt' || !hasExtension()) return null;
+      setSettings({ provider: p });
+      (await agent()).resume(sessionId ?? null);
+      return getSettings();
+    },
     'providers:install': () => ({ ok: false, out: NEEDS_HELPER }),
     'engine:tool': () => ({ content: [{ type: 'text', text: 'Error: ' + NEEDS_HELPER }], isError: true }),
     'sessions:list': () => [],
@@ -414,6 +501,12 @@ export function createBrowserEngine(emit: Emit) {
         return Promise.reject(e);
       }
     },
-    send(_ch: string, _payload?: any) {},
+    send(ch: string, payload?: any) {
+      if (ch === 'tool:result') {
+        const done = pendingTools.get(payload?.id);
+        pendingTools.delete(payload?.id);
+        done?.(payload?.result);
+      }
+    },
   };
 }

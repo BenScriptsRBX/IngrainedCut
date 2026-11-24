@@ -200,7 +200,13 @@ The website editor runs in one of two modes, chosen when a project opens:
 
 - **In the browser** (no install): `src/browserEngine.ts` copies imported media into the browser's private storage
   (OPFS), probes it and makes thumbnails, filmstrips and waveforms with mediabunny, and exports H.264 / HEVC / VP9 /
-  WAV with WebCodecs straight to the file the user picks. AI and FFmpeg-only features say to connect the helper.
+  WAV with WebCodecs straight to the file the user picks. FFmpeg-only features say to connect the helper. With the
+  **IngrainedCut Chrome extension** (`extension/`), the ChatGPT chat runs here too: the extension does Sign in with
+  ChatGPT in a new tab (it reads the code when OpenAI redirects to the loopback address, so nothing listens there), keeps
+  the tokens in its own storage and sends the Responses API requests, while `src/browserChatGpt.ts` runs the conversation
+  and the editor tools in the page (`src/chatgptExtension.ts` talks to it through the content script). Build it with
+  `node scripts/pack-extension.mjs` (`--dev` for a test build against a stand-in OpenAI server); publishing steps are in
+  [docs/chrome-web-store.md](docs/chrome-web-store.md).
 - **With the helper**: the **IngrainedCut helper** (`server/web.mjs`) runs the engine, FFmpeg, export and the AI agents
   (Claude, Codex, Cursor) locally on `127.0.0.1:5310` and only accepts the origins in `server/site.json`. Users start it
   with `npx -y https://<site>/helper/ingrainedcut-<version>.tgz`: the site build packs the repo into that tarball

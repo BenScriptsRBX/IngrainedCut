@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Project } from './types';
 import { S, commit, toast, getAutosaveKey } from './store';
-import { isSite } from './webBridge';
+import { engineReady, isSite } from './webBridge';
 import { contextBlock } from './claudeTools';
 import { engine } from './engine';
 
@@ -380,7 +380,8 @@ export function installChatBridge() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveChat, st.busy ? 4000 : 600);
   });
-  window.icut.getSettings().then((st) => {
+  // the website decides first whether the helper or the browser answers
+  engineReady().then(() => window.icut.getSettings()).then((st) => {
     applyProviderSettings(st);
     setC({ bypass: !!st.autoApproveAll, multiAgent: st.multiAgent !== false });
     loadCatalog(C().provider);

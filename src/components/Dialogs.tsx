@@ -10,7 +10,7 @@ import { SyncDialog, SilenceDialog } from './EditDialogs';
 import { AppPicker, MCP_APPS, NodeLink, connectCommand, useMcpApp } from './HelperConnect';
 import { sequenceDuration, setClipSpeed } from '../ops';
 import { fmtTC } from '../time';
-import { MODELS, EFFORTS, setModel, useChat } from '../chatStore';
+import { MODELS, EFFORTS, loadCatalog, setModel, useChat } from '../chatStore';
 
 export function Dialogs() {
   const dialog = useEditor((s) => s.dialog);
@@ -411,6 +411,8 @@ export function ProviderAuth({ provider, compact }: { provider: 'chatgpt' | 'cod
     const r = await window.icut.providerLogin(provider);
     setBusy(false);
     await refresh();
+    // the plan's model list (empty while signed out)
+    if (r.ok) loadCatalog(provider);
     toast(r.ok ? `Signed in to ${copy.name}` : 'Sign-in did not complete', r.ok ? 'success' : 'error');
   };
   if (!st) return <div className="dim">Checking…</div>;

@@ -49,7 +49,7 @@ export default function Terms() {
           them. We do not control, and are not responsible for, third-party services or their outputs.
         </p>
         <p>
-          If you continue with ChatGPT, Codex in {SITE.name} runs on your ChatGPT plan through OpenAI’s Sign in with ChatGPT: its usage counts toward your
+          If you continue with ChatGPT, ChatGPT and Codex in {SITE.name} run on your ChatGPT plan through OpenAI’s Sign in with ChatGPT: its usage counts toward your
           ChatGPT plan and any limits you set for {SITE.name} in your ChatGPT settings, under OpenAI’s terms.
         </p>
         <p>

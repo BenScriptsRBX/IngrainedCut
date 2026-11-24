@@ -18,6 +18,7 @@ import { mediaUrl } from './mediaServe.mjs';
 import { userDataDir, documentsDir } from './paths.mjs';
 import { keyFor, hasContent, writeSnapshot, listAutosaves, summarize, isAutosaveFile } from './autosave.mjs';
 import * as chatgpt from './chatgptAuth.mjs';
+import { ChatGptAgent } from './chatgptAgent.mjs';
 
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -365,17 +366,18 @@ export function createCore(host) {
   const agents = {
     claude: new AgentManager(agentOpts),
     codex: new CodexAgent(agentOpts),
+    chatgpt: new ChatGptAgent(agentOpts),
     cursor: new CursorAgent(agentOpts),
     relay: new RelayAgent({ emit, onLink: (st) => emit('relay:status', st) }),
   };
   const provider = () => (agents[getSettings().provider] ? getSettings().provider : 'claude');
   // The built-in Claude / Codex chat runs on an API key. Without one, the panel talks to the user's own app instead
   // (relayAgent.mjs), so typing a message never ends in "add an API key".
-  const needsKey = (p, s = getSettings()) => (p === 'claude' && !s.apiKey) || (p === 'codex' && !s.openaiApiKey && !chatgpt.planReady());
+  const needsKey = (p, s = getSettings()) => (p === 'claude' && !s.apiKey) || (p === 'codex' && !s.openaiApiKey && !chatgpt.planReady()) || (p === 'chatgpt' && !chatgpt.planReady());
   if (needsKey(provider())) saveSettings({ provider: 'relay' });
   const active = () => agents[provider()];
   /** settings keys holding each provider's model and effort */
-  const MODEL_KEYS = { claude: ['model', 'effort'], codex: ['codexModel', 'codexEffort'], cursor: ['cursorModel', null], relay: [null, null] };
+  const MODEL_KEYS = { claude: ['model', 'effort'], codex: ['codexModel', 'codexEffort'], chatgpt: ['chatgptModel', 'chatgptEffort'], cursor: ['cursorModel', null], relay: [null, null] };
 
   // ---------- handlers ----------
   // the editor's own buttons (Scene Edit Detection, …) use the same analysis tools the AI does
@@ -415,8 +417,13 @@ export function createCore(host) {
     }
     return getSettings();
   });
-  handle('providers:status', (p) => (p === 'claude' ? claudeStatus() : p === 'relay' ? agents.relay.status() : providerStatus(p, getSettings())));
-  handle('providers:models', (p) => (p === 'claude' ? claudeModels() : p === 'relay' ? [] : providerModels(p)));
+  // ChatGPT: nothing to install; ready once signed in with ChatGPT (plan use allowed)
+  const chatgptStatus = () => {
+    const g = chatgpt.status();
+    return { installed: true, loggedIn: g.signedIn, email: g.email ?? undefined, method: g.plan ? 'ChatGPT plan' : undefined, apiKey: false, ready: g.plan, chatgpt: g };
+  };
+  handle('providers:status', (p) => (p === 'claude' ? claudeStatus() : p === 'relay' ? agents.relay.status() : p === 'chatgpt' ? chatgptStatus() : providerStatus(p, getSettings())));
+  handle('providers:models', (p) => (p === 'claude' ? claudeModels() : p === 'relay' ? [] : p === 'chatgpt' ? chatgpt.listModels().catch(() => []) : providerModels(p)));
   /**
    * The quick Claude Code runs (sign-in status, model list) go one at a time: two Claude Code processes starting together
    * can both renew an expired sign-in, and the renewal that loses can leave Claude Code signed out.
@@ -455,12 +462,13 @@ export function createCore(host) {
   handle('providers:login', async (p) => {
     if (p === 'claude') return { ok: false, out: SIGN_IN_THERE };
     // Codex: Sign in with ChatGPT (IngrainedCut's own registration with OpenAI; the chat then runs on the user's plan)
-    if (p === 'codex') {
+    if (p === 'codex' || p === 'chatgpt') {
       try {
         const r = await chatgpt.signIn((url) => host.shell.openExternal(url));
         clearModelCache('codex');
         agents.codex.reset();
-        if (r.plan && provider() === 'relay') saveSettings({ provider: 'codex' });
+        agents.chatgpt.reset();
+        if (r.plan && provider() === 'relay') saveSettings({ provider: 'chatgpt' });
         return r;
       } catch (e) {
         return { ok: false, out: e.message };
@@ -486,6 +494,7 @@ export function createCore(host) {
     const st = await chatgpt.signOut();
     clearModelCache('codex');
     agents.codex.reset();
+    agents.chatgpt.reset();
     return st;
   });
   handle('chatgpt:welcome-seen', () => chatgpt.markWelcomeSeen());

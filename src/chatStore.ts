@@ -44,17 +44,18 @@ export interface AttachedChat {
   messages: number;
 }
 
-export type Provider = 'claude' | 'codex' | 'cursor' | 'relay';
+export type Provider = 'claude' | 'chatgpt' | 'codex' | 'cursor' | 'relay';
 
 export const PROVIDERS: { id: Provider; name: string; short: string; desc: string }[] = [
   { id: 'claude', name: 'Claude', short: 'Claude', desc: 'Anthropic Claude with your Claude account or API key' },
-  { id: 'codex', name: 'Codex', short: 'Codex', desc: 'OpenAI Codex with your ChatGPT account or OpenAI API key' },
+  { id: 'chatgpt', name: 'ChatGPT', short: 'ChatGPT', desc: 'ChatGPT on your ChatGPT plan (Continue with ChatGPT). Nothing to install' },
+  { id: 'codex', name: 'Codex', short: 'Codex', desc: 'OpenAI Codex (can also run commands and edit files) with your ChatGPT plan or OpenAI API key' },
   { id: 'cursor', name: 'Cursor', short: 'Cursor', desc: 'Cursor Agent with your Cursor account' },
   { id: 'relay', name: 'Your own plan', short: 'Your app', desc: 'Your own Claude Code, Codex or Cursor session, running on your own subscription, taking prompts from here' },
 ];
 
 /** settings keys holding each provider's model and effort (Cursor has no effort setting) */
-const MODEL_KEYS: Record<Provider, [string, string | null]> = { claude: ['model', 'effort'], codex: ['codexModel', 'codexEffort'], cursor: ['cursorModel', null], relay: ['relayModel', null] };
+const MODEL_KEYS: Record<Provider, [string, string | null]> = { claude: ['model', 'effort'], chatgpt: ['chatgptModel', 'chatgptEffort'], codex: ['codexModel', 'codexEffort'], cursor: ['cursorModel', null], relay: ['relayModel', null] };
 
 /** "Your own app" goes by the app the user picked (HelperConnect.tsx useMcpApp), Claude Code unless they chose another. */
 function relayAppName() {

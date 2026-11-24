@@ -165,7 +165,7 @@ export function ChatPanel() {
         <AgentsIndicator />
         <span className="grow" />
         <ModelPicker model={model} effort={effort} provider={provider} />
-        {provider === 'codex' && <PlanBadge />}
+        {(provider === 'chatgpt' || provider === 'codex') && <PlanBadge />}
         <PastChats />
         <button className="icon-btn" title="New conversation" onClick={newChat}>
           <Icon name="newchat" size={15} />
@@ -330,7 +330,11 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
       : provider === 'relay'
         ? [] // your own app uses its own model
         : [
-          { id: '', label: provider === 'cursor' ? 'Auto' : 'Default model', desc: provider === 'cursor' ? 'Cursor picks the model' : 'The model set in your Codex config' },
+          {
+            id: '',
+            label: provider === 'cursor' ? 'Auto' : 'Default model',
+            desc: provider === 'cursor' ? 'Cursor picks the model' : provider === 'chatgpt' ? "ChatGPT's first model for your plan" : 'The model set in your Codex config',
+          },
           ...(catalog ?? []),
         ];
   const isOn = (m: { id: string }) => m.id === model || (provider === 'claude' && !!catalog?.length && claudeModel(model)?.id === m.id);
@@ -339,7 +343,7 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
   const efforts =
     provider === 'claude'
       ? (claudeModel(model)?.efforts ?? EFFORTS.map((x) => x.id)).map((id) => EFFORTS.find((x) => x.id === id) ?? { id, desc: id })
-      : provider === 'codex'
+      : provider === 'codex' || provider === 'chatgpt'
         ? (catalog?.find((m) => m.id === model)?.efforts ?? ['low', 'medium', 'high', 'xhigh', 'max']).map((id) => EFFORTS.find((x) => x.id === id) ?? { id, desc: id })
         : [];
   const pick = (id: string) => {
@@ -418,7 +422,7 @@ function ModelPicker({ model, effort, provider }: { model: string; effort: strin
           </div>
           {efforts.length > 0 && (
             <>
-              <div className="mp-h">{provider === 'codex' ? 'Reasoning effort' : 'Effort'}</div>
+              <div className="mp-h">{provider === 'codex' || provider === 'chatgpt' ? 'Reasoning effort' : 'Effort'}</div>
               <div className="mp-efforts">
                 {efforts.map((x) => (
                   <button key={x.id} className={'chip' + (x.id === effort ? ' on' : '')} title={x.desc} onClick={() => setModel(model, x.id)}>
@@ -720,7 +724,7 @@ function AuthCallout() {
         <ChatGptInvite />
       </div>
     );
-  if (provider === 'cursor' || provider === 'codex')
+  if (provider === 'cursor' || provider === 'codex' || provider === 'chatgpt')
     return (
       <div className="auth-callout">
         <b>Connect {agentName(provider)}</b>
@@ -744,7 +748,7 @@ function AuthCallout() {
 function ChatGptInvite() {
   return (
     <div className="hint">
-      Use your ChatGPT plan in this app: <a onClick={() => setProvider('codex')}>switch to Codex and Continue with ChatGPT</a>.
+      Use your ChatGPT plan in this app: <a onClick={() => setProvider('chatgpt')}>switch to ChatGPT and Continue with ChatGPT</a>.
     </div>
   );
 }

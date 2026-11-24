@@ -82,9 +82,11 @@ never reveal file paths. The desktop app and the browser version share settings 
 Pick the agent from the model button at the top of the chat panel: **Claude**, **Codex** or **Cursor**.
 The built-in Claude chat runs on the user's own Anthropic **API key** (Anthropic doesn't allow apps built on the Agent
 SDK to use a Claude subscription); Claude subscribers run their own Claude Code and connect it over MCP (below). The
-built-in Codex chat runs on the user's **ChatGPT plan** through OpenAI's
+**ChatGPT** chat runs on the user's ChatGPT plan through OpenAI's
 [Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source) for open-source apps
-(**Continue with ChatGPT**, `electron/chatgptAuth.mjs`), or on an OpenAI API key. Cursor uses the user's own Cursor account.
+(**Continue with ChatGPT**, `electron/chatgptAuth.mjs`): `electron/chatgptAgent.mjs` streams the Responses API with the
+editor tools as namespaced function tools, so nothing has to be installed. The **Codex** chat can use the same sign-in, or an
+OpenAI API key. Cursor uses the user's own Cursor account.
 
 - **Claude** — runs on the user's **own Claude Code** (`electron/claudeCode.mjs` finds it: `ICUT_CLAUDE_PATH`, `claude`
   on PATH, the copy inside the Claude desktop app, or `~/.local/bin`), with their skills and settings, on the

@@ -62,11 +62,17 @@ export default function DownloadPage() {
               </td>
             </tr>
             <tr>
+              <td>ChatGPT</td>
+              <td>Nothing to install</td>
+              <td>
+                Pick ChatGPT in the AI panel and click <b>Continue with ChatGPT</b>: the chat runs on your ChatGPT plan (Plus or Pro).
+              </td>
+            </tr>
+            <tr>
               <td>Codex</td>
               <td>Included with the helper</td>
               <td>
-                Built-in chat: pick Codex in the AI panel and click <b>Continue with ChatGPT</b> to use your ChatGPT plan (Plus or Pro), or add an OpenAI API key
-                in Settings.
+                Like ChatGPT, but it can also run commands and edit files. Continue with ChatGPT to use your plan, or add an OpenAI API key in Settings.
               </td>
             </tr>
             <tr>

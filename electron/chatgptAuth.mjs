@@ -12,6 +12,8 @@ const AUTH = 'https://auth.openai.com';
 const AUTHORIZE = `${AUTH}/api/accounts/authorize`;
 const TOKEN = `${AUTH}/api/accounts/oauth/token`;
 export const RESOURCE = 'https://api.openai.com/v1';
+/** where requests go (the OAuth resource stays the real API); ICUT_CHATGPT_API_BASE points it at a local test server */
+export const API_BASE = process.env.ICUT_CHATGPT_API_BASE || RESOURCE;
 const SCOPES = 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct';
 const PLAN_SCOPE = 'chatgpt.tokens.use.direct';
 const APP_NAME = 'IngrainedCut';
@@ -294,7 +296,7 @@ export async function signOut() {
 export async function listModels() {
   const token = await accessToken();
   if (!token) return [];
-  const r = await fetch(`${RESOURCE}/models`, { headers: { Authorization: `Bearer ${token}` } });
+  const r = await fetch(`${API_BASE}/models`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) return [];
   const j = await r.json();
   return (j.models ?? j.data ?? [])

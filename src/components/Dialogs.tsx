@@ -182,6 +182,11 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           Let the agent run non-editor tools (shell, file edits) without asking
         </label>
       </div>
+      <h4 className="form-h">ChatGPT</h4>
+      <div className="form">
+        <label>Account</label>
+        <ProviderAuth provider="chatgpt" />
+      </div>
       <h4 className="form-h">Codex</h4>
       <div className="form">
         <label>Status</label>
@@ -190,8 +195,8 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
         <div>
           <input type="password" placeholder="sk-…" defaultValue={st.openaiApiKey} onBlur={(e) => save({ openaiApiKey: e.target.value.trim() })} style={{ width: '100%' }} />
           <div className="hint">
-            Needed for the Codex chat here (billed by OpenAI at API prices; create one at platform.openai.com). Stored only on this computer. To use a
-            ChatGPT plan instead, <a onClick={() => setS({ dialog: 'mcp' })}>connect your own Codex</a>.
+            For the Codex chat without a ChatGPT sign-in (billed by OpenAI at API prices; create one at platform.openai.com). Stored only on this
+            computer.
           </div>
         </div>
       </div>
@@ -314,12 +319,12 @@ export function ContinueWithChatGPT({ onClick, busy }: { onClick: () => void; bu
 }
 
 /** Codex: Sign in with ChatGPT so the chat runs on the user's ChatGPT plan (or on an OpenAI API key). */
-function ChatGptAuth({ st, busy, login, refresh, compact }: { st: ProviderStatus; busy: boolean; login: () => Promise<void>; refresh: () => Promise<void>; compact?: boolean }) {
+function ChatGptAuth({ st, busy, login, refresh, compact, apiKeyOption }: { st: ProviderStatus; busy: boolean; login: () => Promise<void>; refresh: () => Promise<void>; compact?: boolean; apiKeyOption?: boolean }) {
   const g = st.chatgpt;
   const [welcome, setWelcome] = useState(false);
   const signIn = async () => {
     await login();
-    const now = await window.icut.providerStatus('codex').catch(() => null);
+    const now = await window.icut.providerStatus('chatgpt').catch(() => null);
     if (now?.chatgpt?.plan && !now.chatgpt.welcomeSeen) setWelcome(true);
   };
   return (
@@ -359,7 +364,7 @@ function ChatGptAuth({ st, busy, login, refresh, compact }: { st: ProviderStatus
               </button>
             )}
           </div>
-          {st.apiKey ? <div className="hint">Until then, the chat uses your OpenAI API key.</div> : <div className="hint">Or add an OpenAI API key{compact ? ' in Settings' : ' below'}.</div>}
+          {apiKeyOption && (st.apiKey ? <div className="hint">Until then, the chat uses your OpenAI API key.</div> : <div className="hint">Or add an OpenAI API key{compact ? ' in Settings' : ' below'}.</div>)}
         </>
       )}
       {welcome && (
@@ -383,12 +388,13 @@ function ChatGptAuth({ st, busy, login, refresh, compact }: { st: ProviderStatus
 
 // keyOnly: the built-in chat runs on an API key; plan users connect the provider's own app over MCP instead
 const PROVIDER_COPY = {
+  chatgpt: { name: 'ChatGPT', signIn: 'Continue with ChatGPT', key: '', keyOnly: false, plan: 'ChatGPT plan' },
   codex: { name: 'Codex', signIn: 'Sign in with ChatGPT', key: 'an OpenAI API key', keyOnly: true, plan: 'ChatGPT plan' },
   cursor: { name: 'Cursor', signIn: 'Sign in to Cursor', key: 'a Cursor API key', keyOnly: false, plan: 'Cursor plan' },
 } as const;
 
 /** Sign-in state for Codex / Cursor: runs the CLI's own login (browser) on this computer. */
-export function ProviderAuth({ provider, compact }: { provider: 'codex' | 'cursor'; compact?: boolean }) {
+export function ProviderAuth({ provider, compact }: { provider: 'chatgpt' | 'codex' | 'cursor'; compact?: boolean }) {
   const [st, setSt] = useState<ProviderStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [lines, setLines] = useState<string[]>([]);
@@ -443,7 +449,7 @@ export function ProviderAuth({ provider, compact }: { provider: 'codex' | 'curso
         )}
       </div>
     );
-  if (provider === 'codex') return <ChatGptAuth st={st} busy={busy} login={login} refresh={refresh} compact={compact} />;
+  if (provider === 'codex' || provider === 'chatgpt') return <ChatGptAuth st={st} busy={busy} login={login} refresh={refresh} compact={compact} apiKeyOption={provider === 'codex'} />;
   return (
     <div className="auth-box">
       {st.loggedIn ? (

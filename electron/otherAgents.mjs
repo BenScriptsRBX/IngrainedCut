@@ -63,7 +63,7 @@ function tmpImage(img) {
 const editorToolName = (server, tool) => (TOOL_NAMES.has(tool) ? `mcp__${SERVER}__${tool}` : `mcp__${server || 'mcp'}__${tool}`);
 
 // ---------- shared turn loop ----------
-class CliAgent {
+export class CliAgent {
   constructor(o) {
     this.o = o;
     this.queue = [];

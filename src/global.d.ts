@@ -70,6 +70,8 @@ declare global {
       openExternal(url: string): Promise<void>;
       importMedia(items: { id: string; path: string }[]): Promise<{ id: string; ok: boolean; info?: any; error?: string }[]>;
       refreshAssets(o: { id: string; path: string; info: any }): Promise<void>;
+      /** Download a video from a link with yt-dlp (helper / desktop app) and import it. */
+      downloadMedia(o: { url: string; start?: number; end?: number; max_height?: number; audio_only?: boolean; name?: string; place?: boolean }): Promise<{ downloaded: string; title: string; media_id?: string }>;
       onMediaUpdate(cb: (e: { id: string; patch: any }) => void): Unsub;
       saveProject(path: string, data: any): Promise<boolean>;
       loadProject(path: string): Promise<{ data: any; missing: string[] }>;
@@ -121,7 +123,7 @@ declare global {
       appInfo(): Promise<{ version: string; mcpServerPath: string; bridgeFile: string; ffmpegOk: boolean; userData: string; documents: string; startupProject: string | null }>;
       downloadWhisper(name: string): Promise<string>;
       onWhisperProgress(cb: (e: { got: number; total: number }) => void): Unsub;
-      onCompositionProgress(cb: (j: { id: number; name: string; format: string; progress: number; line: string; done?: boolean; error?: string }) => void): Unsub;
+      onCompositionProgress(cb: (j: { id: number; kind?: 'download'; name: string; format: string; progress: number; line: string; done?: boolean; error?: string }) => void): Unsub;
       onToast(cb: (e: { message: string }) => void): Unsub;
       authStatus(): Promise<{ installed: boolean; loggedIn: boolean; authMethod?: string; email?: string; apiKey: boolean; ready: boolean; source?: string; path?: string; install?: string }>;
       authLogin(o?: { console?: boolean }): Promise<{ ok: boolean; out: string }>;

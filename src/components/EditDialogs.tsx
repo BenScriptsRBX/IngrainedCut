@@ -1,6 +1,6 @@
-// Synchronize… and Remove Silence… dialogs.
+// Synchronize…, Remove Silence… and Import from Link… dialogs.
 import React, { useMemo, useState } from 'react';
-import { useEditor } from '../store';
+import { useEditor, toast } from '../store';
 import { Modal } from './Widgets';
 import { synchronizeSelection, type SyncMethod } from '../sync';
 import { findSilences, removeSilence } from '../cutTools';
@@ -141,3 +141,82 @@ export function SilenceDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+
+/** File → Import from Link: download a video (or its audio) with yt-dlp through the helper / desktop app. */
+export function LinkDialog({ onClose }: { onClose: () => void }) {
+  const [url, setUrl] = useState('');
+  const [quality, setQuality] = useState('1080');
+  const [part, setPart] = useState(false);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [place, setPlace] = useState(true);
+  const secs = (v: string) => {
+    const t = v.trim();
+    if (!t) return undefined;
+    // 90, 1:30 or 1:02:30
+    const n = t.split(':').reduce((a, x) => a * 60 + Number(x), 0);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const ok = /^https?:\/\/\S+$/i.test(url.trim());
+  const go = () => {
+    if (!ok) return;
+    onClose();
+    const audioOnly = quality === 'audio';
+    window.icut
+      .downloadMedia({ url: url.trim(), audio_only: audioOnly, max_height: audioOnly ? undefined : Number(quality), start: part ? secs(from) : undefined, end: part ? secs(to) : undefined, place })
+      .then((r) => toast(`Imported “${r.title}”`, 'success'))
+      .catch((e: any) => toast(String(e?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error', 9000));
+  };
+  return (
+    <Modal
+      title="Import from Link"
+      onClose={onClose}
+      width={520}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" disabled={!ok} onClick={go}>
+            Download
+          </button>
+        </>
+      }
+    >
+      <div className="form">
+        <label>Link</label>
+        <input autoFocus placeholder="https://www.youtube.com/watch?v=…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && go()} />
+        <label>Quality</label>
+        <select value={quality} onChange={(e) => setQuality(e.target.value)}>
+          <option value="720">720p</option>
+          <option value="1080">1080p</option>
+          <option value="1440">1440p</option>
+          <option value="2160">4K</option>
+          <option value="audio">Audio only</option>
+        </select>
+        <label>Part</label>
+        <div className="row">
+          <label className="check">
+            <input type="checkbox" checked={part} onChange={(e) => setPart(e.target.checked)} />
+            Only part of it
+          </label>
+          {part && (
+            <>
+              <input style={{ width: 80 }} placeholder="from 1:30" value={from} onChange={(e) => setFrom(e.target.value)} />
+              <input style={{ width: 80 }} placeholder="to 2:10" value={to} onChange={(e) => setTo(e.target.value)} />
+            </>
+          )}
+        </div>
+        <label>Timeline</label>
+        <label className="check">
+          <input type="checkbox" checked={place} onChange={(e) => setPlace(e.target.checked)} />
+          Put it on the timeline at the playhead
+        </label>
+      </div>
+      <div className="hint" style={{ marginTop: 10 }}>
+        YouTube, Twitch, X, TikTok, Reddit, Instagram, Vimeo and most other video sites. It downloads on this computer with yt-dlp (fetched the first time) into the
+        project’s Downloads folder. Only download videos you have the right to use.
+      </div>
+    </Modal>
+  );
+}

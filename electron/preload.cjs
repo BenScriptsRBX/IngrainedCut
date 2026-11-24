@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('icut', {
   // media
   importMedia: (items) => ipcRenderer.invoke('media:import', items),
   refreshAssets: (o) => ipcRenderer.invoke('media:refresh-assets', o),
+  downloadMedia: (o) => ipcRenderer.invoke('media:download', o),
   onMediaUpdate: on('media:update'),
   // project
   saveProject: (path, data) => ipcRenderer.invoke('project:save', { path, data }),

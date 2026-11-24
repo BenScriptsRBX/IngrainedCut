@@ -488,6 +488,9 @@ export function createBrowserEngine(emit: Emit) {
     'whisper:download': () => {
       throw new Error(NEEDS_HELPER);
     },
+    'media:download': () => {
+      throw new Error('Downloading from links runs on your computer through the IngrainedCut helper. Set it up at https://www.ingrainedcut.com/download, then click Connect.');
+    },
   };
 
   return {

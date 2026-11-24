@@ -16,7 +16,7 @@ export default function DownloadPage() {
         <p className="updated">About a minute.</p>
         <p>
           The editor works on its own in your browser. To edit with ChatGPT on your ChatGPT plan (Plus or Pro), add the IngrainedCut extension to your
-          browser. For transcription, captions from speech, silence and scene detection, and ProRes / GIF / MP3 export, set up the helper on your computer
+          browser. For downloading videos from links (YouTube, Twitch, X, TikTok…), transcription, captions from speech, silence and scene detection, and ProRes / GIF / MP3 export, set up the helper on your computer
           instead (it includes ChatGPT too).
         </p>
 

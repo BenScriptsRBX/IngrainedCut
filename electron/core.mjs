@@ -4,7 +4,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { probe, makeThumbnails, makeAudioAssets, detectSilence, detectScenes, transcribe, loudness, run, FFMPEG, ffmpegFetching } from './media.mjs';
+import { probe, makeThumbnails, makeAudioAssets, detectSilence, detectScenes, transcribe, loudness, run, FFMPEG, ffmpegFetching, ensureFfmpeg } from './media.mjs';
+import { download } from './download.mjs';
 import { startExport, writeFrame, finishExport, cancelExport, writeTempWav, wcStart, wcChunk, wcFinish, wcCancel } from './exporter.mjs';
 import { getSettings, saveSettings, addRecentProject } from './settings.mjs';
 import { AgentManager } from './agent.mjs';
@@ -146,6 +147,8 @@ export function createCore(host) {
       }
       case 'render_composition':
         return renderComposition(args);
+      case 'download_media':
+        return text(await downloadMedia(args));
     }
     throw new Error('Unknown engine tool ' + name);
   }
@@ -359,6 +362,47 @@ export function createCore(host) {
     }
     return text(result);
   }
+
+  // ---------- videos from links (yt-dlp, on this computer) ----------
+  /** Download a link into the project's Downloads folder and import it (optionally placing it), with live progress. */
+  async function downloadMedia(a) {
+    const job = { id: ++renderSeq, kind: 'download', name: a.name || String(a.url ?? ''), format: a.audio_only ? 'audio' : 'video', progress: 0, line: 'Starting…' };
+    emit('composition:progress', job);
+    let got;
+    try {
+      await ensureFfmpeg(); // yt-dlp merges video and audio with FFmpeg
+      got = await download(a.url, {
+        outDir: path.join(agentCwd(), 'Downloads'),
+        start: a.start,
+        end: a.end,
+        maxHeight: a.max_height,
+        audioOnly: !!a.audio_only,
+        ffmpeg: FFMPEG,
+        onProgress: ({ progress, line }) => {
+          job.progress = progress;
+          if (line) job.line = line;
+          if (!a.name && /^Downloading “/.test(line)) job.name = line.slice(13, -1);
+          emit('composition:progress', job);
+        },
+      });
+    } catch (e) {
+      emit('composition:progress', { ...job, done: true, error: e.message.slice(0, 300) });
+      throw e;
+    }
+    emit('composition:progress', { ...job, progress: 1, done: true, line: 'Downloaded. Adding to the project' });
+    const textOf = (r) => r?.content?.find((c) => c.type === 'text')?.text ?? '';
+    const imp = await callRenderer('import_media', { paths: [got.path], name: a.name || got.title });
+    if (imp.isError) throw new Error(textOf(imp));
+    const media = JSON.parse(textOf(imp)).imported?.[0];
+    const result = { downloaded: got.path, title: got.title, media_id: media?.id, duration: media?.duration, width: media?.width, height: media?.height, has_audio: media?.has_audio };
+    if (a.place && media) {
+      const placed = await callRenderer('add_clip', { media_id: media.id, start: a.timeline_start, at_playhead: a.timeline_start == null, track: a.track || 'auto' });
+      result.placed = JSON.parse(textOf(placed));
+    }
+    return result;
+  }
+  // File → Import from Link (the same download, started by the user)
+  handle('media:download', (a) => downloadMedia(a ?? {}));
 
   const agentOpts = { emit, dispatch, getSettings, getCwd: agentCwd, askPermission, getDirs: projectDirs, getCompositionsDir: compositionsDir, getBridge: () => bridge?.info() };
   // the chat runs one agent at a time, chosen in the panel: Claude (API key), Codex (API key), Cursor (the user's login), or

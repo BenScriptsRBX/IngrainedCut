@@ -10,7 +10,7 @@ import { extStream, extCall } from './chatgptExtension';
 
 const NS = 'ingrainedcut';
 const MAX_STEPS = 80; // tool rounds in one turn
-const SKIP = new Set(['wait_for_prompt', 'send_reply', 'detect_silence', 'detect_scenes', 'transcribe', 'analyze_loudness', 'render_composition']);
+const SKIP = new Set(['wait_for_prompt', 'send_reply', 'detect_silence', 'detect_scenes', 'transcribe', 'analyze_loudness', 'render_composition', 'download_media']);
 
 const GUIDE = (() => {
   let g = EDITOR_GUIDE.replace(/the mcp__ingrainedcut__ tools/g, 'the ingrainedcut tools');
@@ -23,7 +23,7 @@ const GUIDE = (() => {
 You can't create files or run commands in this chat, only use the ingrainedcut tools. Build titles, lower thirds and simple motion graphics from add_text, add_color_matte, set_keyframes, transitions and effects, and check them with capture_frame.
 
 # Running in the browser
-This editor runs in the user's web browser without the IngrainedCut helper. Transcription and speech captions, silence detection (remove_silence), scene detection, loudness analysis and HyperFrames compositions need the helper on the user's computer, so those tools are not available here. If the user asks for one, say so and point them to https://www.ingrainedcut.com/download to set up the helper.
+This editor runs in the user's web browser without the IngrainedCut helper. Transcription and speech captions, silence detection (remove_silence), scene detection, loudness analysis, downloading videos from links (download_media) and HyperFrames compositions need the helper on the user's computer, so those tools are not available here. If the user asks for one, say so and point them to https://www.ingrainedcut.com/download to set up the helper.
 
 Tool results and the <editor_state> block are the source of truth for the timeline. The ingrainedcut tools are your editing hands.`;
 })();

@@ -8,7 +8,7 @@ export interface HistoryEntry {
   by: 'user' | 'claude';
 }
 
-export type Dialog = null | 'export' | 'settings' | 'shortcuts' | 'sequence' | 'mcp' | 'speed' | 'about' | 'sync' | 'silence';
+export type Dialog = null | 'export' | 'settings' | 'shortcuts' | 'sequence' | 'mcp' | 'speed' | 'about' | 'sync' | 'silence' | 'link';
 
 export interface Toast {
   id: number;

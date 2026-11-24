@@ -380,6 +380,23 @@ export const TOOL_DEFS = [
     shape: { media_id: z.string() },
   },
   {
+    name: 'download_media',
+    where: 'main',
+    description:
+      'Download a video (or just its audio) from a link with yt-dlp, on the user’s computer, and import it into the bin: YouTube, Twitch clips and VODs, X/Twitter, TikTok, Reddit, Instagram, Vimeo and most other video sites. Use it when the user gives a link to edit. start/end download only part of a long video (source seconds). Returns the new media id; set place to also put it on the timeline. Only download what the user asked for; they are responsible for having the right to use it.',
+    shape: {
+      url: z.string().describe('The video page link, e.g. https://www.youtube.com/watch?v=…'),
+      start: z.number().optional().describe('Download from this point of the video (seconds); default the beginning'),
+      end: z.number().optional().describe('Download up to this point (seconds); default the end'),
+      max_height: z.number().optional().describe('Highest video resolution to fetch, e.g. 720, 1080 (default), 2160'),
+      audio_only: z.boolean().optional().describe('Only the audio (m4a)'),
+      name: z.string().optional().describe('Name for the media in the bin (default: the video title)'),
+      place: z.boolean().optional().describe('Also place it on the timeline (default false)'),
+      timeline_start: z.number().optional().describe('With place: timeline start in seconds (default playhead)'),
+      track: track().optional().describe('With place: video track, or "auto" (default) for the lowest free one'),
+    },
+  },
+  {
     name: 'add_captions',
     where: 'renderer',
     description: 'Create caption text clips from timed segments (e.g. from transcribe) on a dedicated top video track. Times are TIMELINE seconds.',

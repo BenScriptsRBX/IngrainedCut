@@ -245,6 +245,7 @@ function installWebBridge() {
     openExternal: async (url: string) => void window.open(url, '_blank', 'noopener'),
     importMedia: (items: any) => invoke('media:import', items),
     refreshAssets: (o: any) => invoke('media:refresh-assets', o),
+    downloadMedia: (o: any) => invoke('media:download', o),
     onMediaUpdate: on('media:update'),
     saveProject: (path: string, data: any) => invoke('project:save', { path, data }),
     loadProject: (path: string) => invoke('project:load', path),

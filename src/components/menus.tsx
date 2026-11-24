@@ -110,6 +110,7 @@ export function menubar(): { label: string; items: MenuItem[] }[] {
             ]),
         { divider: true },
         { label: 'Import…', shortcut: 'Ctrl+I', action: importDialog },
+        { label: 'Import from Link…', action: () => setS({ dialog: 'link' }) },
         { divider: true },
         { label: 'Export Media…', shortcut: 'Ctrl+M', action: () => setS({ dialog: 'export' }) },
         { label: 'Export Frame', shortcut: 'Ctrl+Shift+E', action: exportFrame },

@@ -6,7 +6,7 @@ import chatgptLogo from '../assets/chatgpt-logo-white.svg';
 import { cancelExport } from '../exporter';
 import { ExportDialog } from './ExportDialog';
 import { isBrowserEngine, isSite } from '../webBridge';
-import { SyncDialog, SilenceDialog } from './EditDialogs';
+import { SyncDialog, SilenceDialog, LinkDialog } from './EditDialogs';
 import { AppPicker, MCP_APPS, NodeLink, connectCommand, useMcpApp } from './HelperConnect';
 import { sequenceDuration, setClipSpeed } from '../ops';
 import { fmtTC } from '../time';
@@ -26,6 +26,7 @@ export function Dialogs() {
       {dialog === 'about' && <AboutDialog onClose={close} />}
       {dialog === 'sync' && <SyncDialog onClose={close} />}
       {dialog === 'silence' && <SilenceDialog onClose={close} />}
+      {dialog === 'link' && <LinkDialog onClose={close} />}
       <ExportProgress />
       <CompositionRenders />
       <Toasts />
@@ -76,7 +77,15 @@ function CompositionRenders() {
       {list.map((j) => (
         <div key={j.id} className={'export-progress hf' + (j.error ? ' failed' : '')}>
           <div className="ep-title">
-            <span className="hf-badge">HF</span> Rendering composition “{j.name}” <span className="dim">({j.format})</span>
+            {j.kind === 'download' ? (
+              <>
+                <span className="hf-badge">DL</span> Downloading “{j.name}” <span className="dim">({j.format})</span>
+              </>
+            ) : (
+              <>
+                <span className="hf-badge">HF</span> Rendering composition “{j.name}” <span className="dim">({j.format})</span>
+              </>
+            )}
           </div>
           <div className="ep-bar">
             <div style={{ width: `${Math.round((j.done && !j.error ? 1 : j.progress) * 100)}%` }} />

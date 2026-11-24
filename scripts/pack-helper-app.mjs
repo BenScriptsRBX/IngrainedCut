@@ -52,6 +52,8 @@ const config = {
   asar: false, // FFmpeg and the MCP server are started as real files
   files: ['**/*'],
   win: { target: [{ target: 'nsis', arch: ['x64'] }], icon: path.join(STAGE, 'build', 'icon.png') },
+  // ingrainedcut:// starts the helper from the website's Connect button
+  protocols: [{ name: 'IngrainedCut Helper', schemes: ['ingrainedcut'] }],
   nsis: {
     oneClick: true,
     perMachine: false,

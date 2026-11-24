@@ -26,8 +26,9 @@ export default function DownloadPage() {
           </a>
         </p>
         <p>
-          Run the installer. The helper starts right away, sits by the clock (IngrainedCut icon) and starts with Windows; right-click the icon to quit it or
-          turn that off. If Windows shows “Windows protected your PC”, click <b>More info</b> → <b>Run anyway</b>.
+          Run the installer. After that, <b>Connect</b> in the editor starts the helper whenever you edit (your browser asks once to open IngrainedCut
+          Helper), and it quits by itself when you stop. While it runs it sits by the clock (IngrainedCut icon): right-click it to quit, or to have it start
+          with Windows. If Windows shows “Windows protected your PC” while installing, click <b>More info</b> → <b>Run anyway</b>.
         </p>
 
         <h2>macOS and Linux</h2>
@@ -51,7 +52,7 @@ export default function DownloadPage() {
         <h2>Troubleshooting</h2>
         <ul>
           <li>
-            <b>Connect can’t find the helper</b> — make sure the helper is running (Windows: the IngrainedCut icon by the clock; macOS / Linux: the terminal with the command), and that you allowed local network access
+            <b>Connect can’t find the helper</b> — on Windows, click Connect again and choose Open when the browser asks to open IngrainedCut Helper; on macOS / Linux, make sure the terminal with the command is still open, and that you allowed local network access
             (site settings → Local network access).
           </li>
           <li>

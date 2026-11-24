@@ -117,29 +117,51 @@ function AllowLocalNetwork() {
   );
 }
 
+/** Windows: the installed helper app opens for this link (its installer registers ingrainedcut://). */
+const HELPER_LINK = 'ingrainedcut://connect';
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 function ConnectButton() {
-  const [state, setState] = useState<'idle' | 'checking' | 'missing' | 'blocked'>('idle');
+  const [state, setState] = useState<'idle' | 'checking' | 'starting' | 'missing' | 'not-started' | 'blocked'>('idle');
   // already blocked (the browser won't even ask): say so up front
   useEffect(() => void localNetworkPermission().then((p) => p === 'denied' && setState('blocked')), []);
+  const connect = async () => {
+    setState('checking');
+    if (await connectHelper()) return;
+    if ((await localNetworkPermission()) === 'denied') return setState('blocked');
+    if (!isWindows) return setState('missing');
+    // not running: start the installed helper through its link (the browser asks once to open IngrainedCut Helper),
+    // then connect as soon as it answers
+    setState('starting');
+    location.href = HELPER_LINK;
+    for (let i = 0; i < 40; i++) {
+      await sleep(1000);
+      if (await helperReachable(1200)) {
+        if (await connectHelper()) return;
+      }
+    }
+    setState('not-started');
+  };
   return (
     <>
-      <button
-        className="btn primary sm"
-        disabled={state === 'checking'}
-        onClick={async () => {
-          setState('checking');
-          if (!(await connectHelper())) setState((await localNetworkPermission()) === 'denied' ? 'blocked' : 'missing');
-        }}
-      >
-        {state === 'checking' ? 'Looking for the helper…' : state === 'idle' ? 'Connect' : 'Connect again'}
+      <button className="btn primary sm" disabled={state === 'checking' || state === 'starting'} onClick={connect}>
+        {state === 'checking' ? 'Looking for the helper…' : state === 'starting' ? 'Starting the helper…' : state === 'idle' ? 'Connect' : 'Connect again'}
       </button>
+      {state === 'starting' && <div className="hint">If your browser asks to open IngrainedCut Helper, choose Open.</div>}
       {state === 'blocked' && <AllowLocalNetwork />}
+      {state === 'not-started' && (
+        <div className="hint">
+          <span className="warn-text">The helper didn't start.</span> Install it first (then click Connect again), or if it's installed, let your browser
+          open IngrainedCut Helper when it asks:
+          <div>
+            <DownloadHelper />
+          </div>
+        </div>
+      )}
       {state === 'missing' && (
         <div className="hint">
-          <span className="warn-text">
-            {isWindows ? "Couldn't reach the helper — is it installed and running (IngrainedCut icon by the clock)?" : "Couldn't reach the helper — is the command still running?"}
-          </span>{' '}
-          If your browser asked about your local network, choose Allow.
+          <span className="warn-text">Couldn't reach the helper — is the command still running?</span> If your browser asked about your local network, choose
+          Allow.
         </div>
       )}
     </>
@@ -151,12 +173,12 @@ function Steps() {
     return (
       <ol className="helper-steps">
         <li>
-          Install the IngrainedCut helper (free, about 120 MB). It runs quietly in the background and starts with Windows:
+          Install the IngrainedCut helper (free, about 120 MB). Once installed, Connect starts it whenever you edit:
           <div>
             <DownloadHelper />
           </div>
         </li>
-        <li>Click Connect — after the first time, this page connects by itself. Your browser may ask to allow access to your local network — choose Allow.</li>
+        <li>Click Connect: it starts the helper and connects. Your browser may ask to open IngrainedCut Helper and to allow access to your local network — choose Open and Allow.</li>
       </ol>
     );
   return (
@@ -207,7 +229,7 @@ export function HelperNeeded() {
         <ol className="helper-steps">
           {isWindows ? (
             <li>
-              Install the IngrainedCut helper (free). It runs in the background and starts with Windows:
+              Install the IngrainedCut helper (free). Once installed, Connect starts it whenever you edit:
               <div>
                 <DownloadHelper />
               </div>

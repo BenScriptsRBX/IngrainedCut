@@ -236,6 +236,8 @@ async function siteEditorFile(rel) {
 // ---------- WebSocket: the same channels the Electron preload exposes ----------
 const wss = new WebSocketServer({ noServer: true, maxPayload: 512 * 1024 * 1024 });
 const clients = new Set();
+/** How many editor tabs are connected right now (the Windows helper app quits after a while with none). */
+export const connectedEditors = () => clients.size;
 let editor = null; // the tab that executes the AI's tool calls (most recently active)
 const handlers = new Map();
 const listeners = new Map();

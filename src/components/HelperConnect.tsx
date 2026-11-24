@@ -1,7 +1,7 @@
 // Website editor: the optional helper. Without it everything but the AI agents (and a few FFmpeg formats) runs in
 // the browser; these explain what it adds and connect to it.
 import React, { useEffect, useRef, useState } from 'react';
-import { HELPER_PORT, SITE_ORIGIN, connectHelper, engineMode, helperOutdated, helperReachable, helperVersion, helperWasUsed, isSite } from '../webBridge';
+import { SITE_ORIGIN, connectHelper, engineMode, helperOutdated, helperReachable, helperVersion, helperWasUsed, isSite } from '../webBridge';
 import { S, toast } from '../store';
 import { Icon } from './Icons';
 
@@ -107,13 +107,13 @@ async function localNetworkPermission() {
   }
 }
 
-/** The way around a blocked permission: the website hands the project to the helper, which serves the editor itself. */
-function OpenThroughHelper() {
-  const project = new URLSearchParams(location.search).get('project') ?? '';
+/** The browser blocks this site from reaching the helper: how to allow it (the editor always stays on the website). */
+function AllowLocalNetwork() {
   return (
-    <a className="btn primary sm" href={`/editor/local?project=${encodeURIComponent(project)}${HELPER_PORT !== 5310 ? `&port=${HELPER_PORT}` : ''}`} style={{ display: 'inline-block', margin: '6px 0' }}>
-      Connect
-    </a>
+    <div className="hint">
+      <span className="warn-text">Your browser is blocking this site from reaching the helper on your computer.</span> Click the icon at the left of the
+      address bar, turn on <b>Local network access</b> (or open Site settings → Local network access → Allow), then click Connect again.
+    </div>
   );
 }
 
@@ -121,8 +121,6 @@ function ConnectButton() {
   const [state, setState] = useState<'idle' | 'checking' | 'missing' | 'blocked'>('idle');
   // already blocked (the browser won't even ask): say so up front
   useEffect(() => void localNetworkPermission().then((p) => p === 'denied' && setState('blocked')), []);
-  // the browser won't let this page reach the helper: open the editor from the helper instead (one click, no settings)
-  if (state === 'blocked') return <OpenThroughHelper />;
   return (
     <>
       <button
@@ -133,15 +131,15 @@ function ConnectButton() {
           if (!(await connectHelper())) setState((await localNetworkPermission()) === 'denied' ? 'blocked' : 'missing');
         }}
       >
-        {state === 'checking' ? 'Looking for the helper…' : 'Connect'}
+        {state === 'checking' ? 'Looking for the helper…' : state === 'idle' ? 'Connect' : 'Connect again'}
       </button>
+      {state === 'blocked' && <AllowLocalNetwork />}
       {state === 'missing' && (
         <div className="hint">
-          <span className="warn-text">{isWindows ? "Couldn't reach the helper — is it installed and running (IngrainedCut icon by the clock)?" : "Couldn't reach the helper — is the command still running?"}</span> If your browser asked about your local network and you
-          didn't allow it, use this instead:
-          <div>
-            <OpenThroughHelper />
-          </div>
+          <span className="warn-text">
+            {isWindows ? "Couldn't reach the helper — is it installed and running (IngrainedCut icon by the clock)?" : "Couldn't reach the helper — is the command still running?"}
+          </span>{' '}
+          If your browser asked about your local network, choose Allow.
         </div>
       )}
     </>

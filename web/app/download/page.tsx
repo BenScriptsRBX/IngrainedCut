@@ -15,9 +15,9 @@ export default function DownloadPage() {
         <h1>Set up AI editing</h1>
         <p className="updated">About a minute.</p>
         <p>
-          The editor works on its own in your browser. To edit with ChatGPT on your ChatGPT plan (Plus or Pro), add the IngrainedCut extension to your
-          browser. For downloading videos from links (YouTube, Twitch, X, TikTok…), transcription, captions from speech, silence and scene detection, and ProRes / GIF / MP3 export, set up the helper on your computer
-          instead (it includes ChatGPT too).
+          The editor works on its own in your browser. To edit with ChatGPT on your ChatGPT plan (Plus or Pro) and download videos from links (YouTube,
+          Twitch, X, TikTok…), add the IngrainedCut extension to your browser. For transcription, captions from speech, silence and scene detection, and
+          ProRes / GIF / MP3 export, set up the helper on your computer instead (it includes ChatGPT and downloading too).
         </p>
 
         <h2 id="extension">Chrome, Edge or Brave: the extension</h2>
@@ -51,6 +51,11 @@ export default function DownloadPage() {
         <p>
           Then open the editor (reload it if it was open), pick <b>ChatGPT</b> in the AI panel and click <b>Continue with ChatGPT</b>. Your ChatGPT sign-in
           stays in the extension in your browser and goes only to OpenAI; the chat edits your timeline right in the page.
+        </p>
+        <p>
+          The extension also downloads videos from links: <b>File → Import from Link…</b> in the editor, or ask ChatGPT. It runs{' '}
+          <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a> inside your browser, so the video comes straight from the site to your browser&apos;s
+          storage. Only download videos you have the right to use.
         </p>
 
         <h2>The helper</h2>

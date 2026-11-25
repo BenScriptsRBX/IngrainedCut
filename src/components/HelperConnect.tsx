@@ -254,7 +254,7 @@ export function HelperNeeded() {
               </li>
             </ol>
             <p className="hint">
-              For downloading videos from links, transcription, captions from speech, and silence and scene detection, set up the helper on your computer:
+              For transcription, captions from speech, and silence and scene detection, set up the helper on your computer:
             </p>
           </>
         )}

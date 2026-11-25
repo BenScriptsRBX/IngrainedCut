@@ -6,6 +6,8 @@
 import { ALL_FORMATS, AudioBufferSink, BlobSource, CanvasSink, Input } from 'mediabunny';
 import { extCall, hasExtension } from './chatgptExtension';
 import type { BrowserChatGpt } from './browserChatGpt';
+import { hasExtensionYtdlp, ytdlpDownload } from './extensionYtdlp';
+import { playsAsIs, remux } from './remux';
 
 /** Paths of media kept in browser storage: browser:/media/<uid>/<name>, cache files under browser:/cache/. */
 export const BROWSER_PREFIX = 'browser:/';
@@ -85,6 +87,25 @@ export async function cacheUrl(url: string, name: string): Promise<string> {
 }
 
 export const browserFileExists = (p: string) => fileExists(p);
+
+async function removeFile(path: string) {
+  const parts = path.slice(BROWSER_PREFIX.length).split('/').filter(Boolean);
+  let dir = await navigator.storage.getDirectory();
+  for (const p of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(p);
+  await dir.removeEntry(parts[parts.length - 1]);
+}
+
+/** Give a stored file a new name in its folder; returns the new path. */
+async function renameFile(path: string, name: string) {
+  const to = path.slice(0, path.lastIndexOf('/') + 1) + name;
+  const h: any = await handleFor(path);
+  if (typeof h.move === 'function') await h.move(name);
+  else {
+    await writeFile(to, await h.getFile());
+    await removeFile(path);
+  }
+  return to;
+}
 
 // ---------- probing ----------
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|bmp|avif|svg)$/i;
@@ -308,6 +329,8 @@ function setSettings(patch: any) {
 }
 
 export const NEEDS_HELPER = 'AI agents and this feature run on your computer through the IngrainedCut helper. Start it, then click Connect in the editor.';
+const DOWNLOAD_NEEDS =
+  'Downloading from links needs the IngrainedCut Chrome extension (it runs yt-dlp in your browser) or the IngrainedCut helper on your computer. Get either at https://www.ingrainedcut.com/download.';
 const CODEX_NEEDS_HELPER = 'Codex runs on your computer through the IngrainedCut helper. In the browser, pick ChatGPT instead (it runs on your ChatGPT plan through the IngrainedCut extension).';
 /** settings keys holding each provider's model and effort */
 const MODEL_KEYS: Record<string, [string, string | null]> = { claude: ['model', 'effort'], chatgpt: ['chatgptModel', 'chatgptEffort'], codex: ['codexModel', 'codexEffort'] };
@@ -330,11 +353,96 @@ export function createBrowserEngine(emit: Emit) {
       emit('tool:invoke', { id, name, args });
     });
   let agentP: Promise<BrowserChatGpt> | null = null;
-  const agent = () => (agentP ??= import('./browserChatGpt').then((m) => new m.BrowserChatGpt({ emit, dispatch, getSettings })));
+  const agent = () => (agentP ??= import('./browserChatGpt').then((m) => new m.BrowserChatGpt({ emit, dispatch: runTool, getSettings })));
   const chatgptStatus = async () => {
     const g = await extCall('status');
     return { installed: true, loggedIn: g.signedIn, email: g.email ?? undefined, method: g.plan ? 'ChatGPT plan' : undefined, apiKey: false, ready: g.plan, chatgpt: g };
   };
+  // ---- videos from links: yt-dlp in the IngrainedCut extension ----
+  let dlSeq = 0;
+  const mb = (n: number) => (n >= 1 << 30 ? (n / (1 << 30)).toFixed(2) + ' GB' : (n / (1 << 20)).toFixed(1) + ' MB');
+  /** Download a link into browser storage and import it (optionally placing it), like the helper's download_media. */
+  async function downloadInBrowser(a: any) {
+    if (!hasExtensionYtdlp()) throw new Error(DOWNLOAD_NEEDS);
+    const url = String(a?.url ?? '').trim();
+    if (!/^https?:\/\//i.test(url)) throw new Error('Paste a link that starts with http:// or https://');
+    const job: any = { id: 1_000_000 + ++dlSeq, kind: 'download', name: a.name || url, format: a.audio_only ? 'audio' : 'video', progress: 0, line: 'Starting…' };
+    const show = () => emit('composition:progress', { ...job });
+    show();
+    const dir = `${BROWSER_PREFIX}media/${uid()}/`;
+    const parts: string[] = [];
+    let title = a.name || '';
+    let final = '';
+    let res: Awaited<ReturnType<typeof ytdlpDownload>>;
+    try {
+      res = await ytdlpDownload(
+        url,
+        { max_height: a.max_height, audio_only: !!a.audio_only },
+        async (file, i) => {
+          const path = `${dir}part${i}.${String(file.ext || 'bin').replace(/\W/g, '')}`;
+          parts.push(path);
+          const w = await (await handleFor(path, true)).createWritable();
+          return { write: (d) => w.write(d), close: () => w.close(), abort: () => w.abort() };
+        },
+        (p) => {
+          if (p.title && !a.name) title = job.name = p.title;
+          if (p.progress != null) job.progress = p.progress * 0.95;
+          if (p.line) job.line = p.line.replace(/^\[[\w:]+\]\s*/, '');
+          else if (p.total) job.line = `${mb(p.bytes ?? 0)} of ${mb(p.total)}${p.speed ? ` · ${mb(p.speed)}/s` : ''}`;
+          show();
+        },
+      );
+      title ||= res.title;
+      const base = safeName(title).replace(/\.+$/, '').slice(0, 120) || 'video';
+      const files = await Promise.all(parts.map(readFile));
+      if (parts.length === 1 && (await playsAsIs(files[0]))) {
+        final = await renameFile(parts[0], `${base}.${parts[0].split('.').pop()}`);
+      } else {
+        job.line = parts.length > 1 ? 'Combining the video and audio…' : 'Converting to MP4…';
+        show();
+        const tmp = `${dir}combined.tmp`;
+        const w = await (await handleFor(tmp, true)).createWritable();
+        let ext: string;
+        try {
+          ext = await remux(files, w);
+        } catch (e) {
+          await w.abort().catch(() => {});
+          throw e;
+        }
+        final = await renameFile(tmp, `${base}.${a.audio_only && ext === 'mp4' ? 'm4a' : ext}`);
+        for (const p of parts) await removeFile(p).catch(() => {});
+      }
+    } catch (e: any) {
+      emit('composition:progress', { ...job, done: true, error: String(e?.message ?? e).slice(0, 300) });
+      for (const p of parts) await removeFile(p).catch(() => {});
+      throw e;
+    }
+    emit('composition:progress', { ...job, progress: 1, done: true, line: 'Downloaded. Adding to the project' });
+    const textOf = (r: any) => r?.content?.find((c: any) => c.type === 'text')?.text ?? '';
+    const imp = await dispatch('import_media', { paths: [final], name: a.name || title });
+    if (imp?.isError) throw new Error(textOf(imp));
+    const media = JSON.parse(textOf(imp)).imported?.[0];
+    const result: any = { downloaded: final, title, media_id: media?.id, duration: media?.duration, width: media?.width, height: media?.height, has_audio: media?.has_audio };
+    const from = a.start != null ? Number(a.start) : undefined;
+    const to = a.end != null ? Number(a.end) : undefined;
+    if (from != null || to != null) result.note = "In the browser the whole video is downloaded; the part asked for is set as the clip's source in/out when it is placed.";
+    if (a.place && media) {
+      const placed = await dispatch('add_clip', { media_id: media.id, start: a.timeline_start, at_playhead: a.timeline_start == null, track: a.track || 'auto', ...(from != null ? { source_in: from } : {}), ...(to != null ? { source_out: to } : {}) });
+      if (placed?.isError) throw new Error(textOf(placed));
+      result.placed = JSON.parse(textOf(placed));
+    }
+    return result;
+  }
+  // the AI's tools: download_media runs here, the rest in the editor (claudeTools.ts)
+  const runTool = async (name: string, args: any) => {
+    if (name !== 'download_media') return dispatch(name, args);
+    try {
+      return { content: [{ type: 'text', text: JSON.stringify(await downloadInBrowser(args ?? {})) }] };
+    } catch (e: any) {
+      return { content: [{ type: 'text', text: 'Error: ' + (e?.message || String(e)) }], isError: true };
+    }
+  };
+
   const helperOnly = { installed: false, loggedIn: false, apiKey: false, ready: false, error: NEEDS_HELPER };
   let signingIn = false;
   async function chatgptSignIn() {
@@ -488,9 +596,7 @@ export function createBrowserEngine(emit: Emit) {
     'whisper:download': () => {
       throw new Error(NEEDS_HELPER);
     },
-    'media:download': () => {
-      throw new Error('Downloading from links runs on your computer through the IngrainedCut helper. Set it up at https://www.ingrainedcut.com/download, then click Connect.');
-    },
+    'media:download': (a: any) => downloadInBrowser(a ?? {}),
   };
 
   return {

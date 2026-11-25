@@ -2,15 +2,18 @@
 // The IngrainedCut Chrome extension (chatgptExtension.ts) holds the Sign in with ChatGPT tokens and sends each request;
 // this file keeps the conversation, streams OpenAI's Responses API, and runs the editor tools the model calls right
 // here in the page. Tools that need FFmpeg or Whisper on the computer (transcription, silence and scene detection,
-// loudness, compositions) are left out: they need the helper.
+// loudness, compositions) are left out: they need the helper. Downloading from links (download_media) runs yt-dlp in the
+// extension when its build has the downloader (extensionYtdlp.ts).
 import { z } from 'zod';
 import { TOOL_DEFS } from '../electron/tools.mjs';
 import { EDITOR_GUIDE } from '../electron/guide.mjs';
 import { extStream, extCall } from './chatgptExtension';
+import { hasExtensionYtdlp } from './extensionYtdlp';
 
 const NS = 'ingrainedcut';
 const MAX_STEPS = 80; // tool rounds in one turn
-const SKIP = new Set(['wait_for_prompt', 'send_reply', 'detect_silence', 'detect_scenes', 'transcribe', 'analyze_loudness', 'render_composition', 'download_media']);
+const HELPER_ONLY = ['wait_for_prompt', 'send_reply', 'detect_silence', 'detect_scenes', 'transcribe', 'analyze_loudness', 'render_composition'];
+const SKIP = new Set([...HELPER_ONLY, ...(hasExtensionYtdlp() ? [] : ['download_media'])]);
 
 const GUIDE = (() => {
   let g = EDITOR_GUIDE.replace(/the mcp__ingrainedcut__ tools/g, 'the ingrainedcut tools');
@@ -23,7 +26,9 @@ const GUIDE = (() => {
 You can't create files or run commands in this chat, only use the ingrainedcut tools. Build titles, lower thirds and simple motion graphics from add_text, add_color_matte, set_keyframes, transitions and effects, and check them with capture_frame.
 
 # Running in the browser
-This editor runs in the user's web browser without the IngrainedCut helper. Transcription and speech captions, silence detection (remove_silence), scene detection, loudness analysis, downloading videos from links (download_media) and HyperFrames compositions need the helper on the user's computer, so those tools are not available here. If the user asks for one, say so and point them to https://www.ingrainedcut.com/download to set up the helper.
+This editor runs in the user's web browser without the IngrainedCut helper. Transcription and speech captions, silence detection (remove_silence), scene detection, loudness analysis${hasExtensionYtdlp() ? '' : ', downloading videos from links (download_media)'} and HyperFrames compositions need the helper on the user's computer, so those tools are not available here. If the user asks for one, say so and point them to https://www.ingrainedcut.com/download to set up the helper.${hasExtensionYtdlp() ? `
+
+download_media works here: the IngrainedCut extension runs yt-dlp in the browser. It downloads the whole video (start/end become the clip's source in/out when you place it), and large or long videos take a while.` : ''}
 
 Tool results and the <editor_state> block are the source of truth for the timeline. The ingrainedcut tools are your editing hands.`;
 })();

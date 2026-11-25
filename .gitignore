@@ -23,3 +23,7 @@ skills-lock.json
 .ingrainedcut/
 compositions/
 web/.helper-build/
+
+# the extension's yt-dlp: Pyodide and the wheels are copied in by scripts/pack-extension.mjs
+extension/ytdlp/pyodide/
+extension/ytdlp/wheels/*.whl

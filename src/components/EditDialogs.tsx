@@ -5,6 +5,7 @@ import { Modal } from './Widgets';
 import { synchronizeSelection, type SyncMethod } from '../sync';
 import { findSilences, removeSilence } from '../cutTools';
 import { expandLinked } from '../ops';
+import { engineMode } from '../webBridge';
 
 export function SyncDialog({ onClose }: { onClose: () => void }) {
   const selection = useEditor((s) => s.selection);
@@ -142,7 +143,7 @@ export function SilenceDialog({ onClose }: { onClose: () => void }) {
 }
 
 
-/** File → Import from Link: download a video (or its audio) with yt-dlp through the helper / desktop app. */
+/** File → Import from Link: download a video (or its audio) with yt-dlp through the helper / desktop app, or the extension in the browser. */
 export function LinkDialog({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState('');
   const [quality, setQuality] = useState('1080');
@@ -214,8 +215,11 @@ export function LinkDialog({ onClose }: { onClose: () => void }) {
         </label>
       </div>
       <div className="hint" style={{ marginTop: 10 }}>
-        YouTube, Twitch, X, TikTok, Reddit, Instagram, Vimeo and most other video sites. It downloads on this computer with yt-dlp (fetched the first time) into the
-        project’s Downloads folder. Only download videos you have the right to use.
+        YouTube, Twitch, X, TikTok, Reddit, Instagram, Vimeo and most other video sites.{' '}
+        {engineMode() === 'browser'
+          ? 'The IngrainedCut extension downloads it with yt-dlp right in this browser, into its storage. The whole video is downloaded; a part becomes the clip’s in and out points.'
+          : 'It downloads on this computer with yt-dlp (fetched the first time) into the project’s Downloads folder.'}{' '}
+        Only download videos you have the right to use.
       </div>
     </Modal>
   );

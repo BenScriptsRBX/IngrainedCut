@@ -3,18 +3,64 @@
   "name": "IngrainedCut",
   "short_name": "IngrainedCut",
   "version": "0.2.28",
-  "description": "Edit videos on ingrainedcut.com with ChatGPT on your own ChatGPT plan. Nothing else to install.",
+  "description": "Edit videos on ingrainedcut.com with ChatGPT on your own ChatGPT plan, and download videos from links (yt-dlp) right in the browser. Nothing else to install.",
   "homepage_url": "https://www.ingrainedcut.com",
-  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
-  "action": { "default_title": "IngrainedCut", "default_popup": "popup.html", "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" } },
-  "background": { "service_worker": "background.js", "type": "module" },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "IngrainedCut",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
-      "matches": ["https://www.ingrainedcut.com/*", "https://ingrainedcut.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://www.ingrainedcut.com/*",
+        "https://ingrainedcut.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     }
   ],
-  "permissions": ["storage"],
-  "host_permissions": ["http://127.0.0.1:1455/*", "https://auth.openai.com/*", "https://api.openai.com/*"]
+  "permissions": [
+    "storage",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "ytdlp/ytdlp.html",
+        "ytdlp/solver.html",
+        "ytdlp/solver.js"
+      ],
+      "matches": [
+        "https://www.ingrainedcut.com/*",
+        "https://ingrainedcut.com/*"
+      ]
+    }
+  ],
+  "sandbox": {
+    "pages": [
+      "ytdlp/solver.html"
+    ]
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
 }

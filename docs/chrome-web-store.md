@@ -9,6 +9,9 @@ Until it's listed, people get the extension from the GitHub release (`IngrainedC
    one-time $5 fee.
 2. Build the package: `node scripts/pack-extension.mjs`. It writes `../IngrainedCut-extension/IngrainedCut-Chrome-Extension-store.zip`,
    with the files at the zip's root as the store requires.
+   The store zip leaves out the video downloader (`ytdlp/`, yt-dlp in the browser) and the permissions it needs
+   (all sites, declarativeNetRequest): the Chrome Web Store doesn't allow extensions that download YouTube videos. The
+   downloader is only in `IngrainedCut-Chrome-Extension.zip` from the GitHub release.
 3. In the developer console, click **New item** and upload that zip.
 4. Fill in the listing, privacy and permission fields with the text below. Add at least one 1280×800 screenshot, such as
    the editor with the ChatGPT chat open.

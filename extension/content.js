@@ -3,6 +3,9 @@
 // talk to it (messages from frames or other windows are ignored), and the sign-in tokens never reach the page.
 const VERSION = chrome.runtime.getManifest().version;
 document.documentElement.setAttribute('data-icut-extension', VERSION);
+// the video downloader (yt-dlp), which the website opens in a hidden frame; not in the Chrome Web Store build
+if (chrome.runtime.getManifest().web_accessible_resources?.some((r) => r.resources.includes('ytdlp/ytdlp.html')))
+  document.documentElement.setAttribute('data-icut-extension-ytdlp', chrome.runtime.getURL('ytdlp/ytdlp.html'));
 
 const streams = new Map(); // request id -> port
 const reply = (msg) => window.postMessage({ __icut: 'from-ext', ...msg }, location.origin);

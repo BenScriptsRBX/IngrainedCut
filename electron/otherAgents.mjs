@@ -218,6 +218,9 @@ export class CodexAgent extends CliAgent {
         developer_instructions: GUIDE,
         mcp_servers: { [SERVER]: { ...mcpLaunch('codex', this.o.getBridge?.()), startup_timeout_sec: 30, tool_timeout_sec: 1800, default_tools_approval_mode: 'approve' } },
         ...(planToken ? chatgpt.PLAN_PROVIDER_CONFIG : {}),
+        // Sub-agents (newer models start them on their own) talk to each other in message items that ChatGPT plan
+        // usage rejects (subscription_sharing_unsupported_capability), so on a plan Codex works without them
+        ...(planToken ? { agents: { enabled: false } } : {}),
       },
     });
     const opts = {
@@ -229,6 +232,7 @@ export class CodexAgent extends CliAgent {
       model: s.codexModel || undefined,
       modelReasoningEffort: s.codexEffort || undefined,
     };
+    this.continuing = !!this.session; // an earlier conversation picked up again (see friendlyError)
     const thread = this.session ? codex.resumeThread(this.session, opts) : codex.startThread(opts);
     const input = [{ type: 'text', text: (context ? context + '\n\n' : '') + text }];
     const files = images.map(tmpImage);
@@ -332,6 +336,8 @@ export class CodexAgent extends CliAgent {
     if (/subscription_sharing_user_not_eligible/.test(msg))
       return "This ChatGPT account's plan can't be used in other apps. Use a ChatGPT Plus or Pro plan, or add an OpenAI API key in Settings.";
     if (/subscription_sharing_(usage|user)_unavailable/.test(msg)) return 'ChatGPT plan usage is temporarily unavailable. Try again in a minute.';
+    if (/subscription_sharing_unsupported_capability/.test(msg) && this.continuing)
+      return "This conversation used something a ChatGPT plan can't continue (such as Codex's sub-agents, which are now turned off on a plan). Start a new conversation (the + button at the top of the chat) and send your message again.";
     if (/subscription_sharing_unsupported_capability|subscription_sharing_route_not_supported/.test(msg))
       return `That request isn't supported on a ChatGPT plan (try another model). (${msg.slice(0, 300)})`;
     if (chatgpt.planReady() && /401|unauthori[sz]ed|incorrect api key/i.test(msg))

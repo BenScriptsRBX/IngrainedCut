@@ -168,13 +168,16 @@ export function ChatPanel() {
         <span className="grow" />
         <ModelPicker model={model} effort={effort} provider={provider} />
         {(provider === 'chatgpt' || provider === 'codex') && <PlanBadge provider={provider} />}
-        <PastChats />
-        <button className="icon-btn" title="New conversation" onClick={newChat}>
-          <Icon name="newchat" size={15} />
-        </button>
-        <button className="icon-btn" title="Hide (Ctrl+J)" onClick={() => setS({ showChat: false })}>
-          <Icon name="close" size={14} />
-        </button>
+        {/* the panel's own buttons stay visible however narrow the panel is (everything before them shrinks first) */}
+        <div className="chat-actions">
+          <PastChats />
+          <button className="icon-btn" title="New conversation" onClick={newChat}>
+            <Icon name="newchat" size={15} />
+          </button>
+          <button className="icon-btn" title="Hide (Ctrl+J)" onClick={() => setS({ showChat: false })}>
+            <Icon name="close" size={14} />
+          </button>
+        </div>
       </div>
 
       <div
@@ -842,6 +845,11 @@ function ChatRow({ item }: { item: ChatItem }) {
           {/authenticat|api key|login/i.test(item.text) && (
             <button className="btn sm" onClick={() => setS({ dialog: 'settings' })}>
               Open Settings
+            </button>
+          )}
+          {/start a new conversation/i.test(item.text) && (
+            <button className="btn sm" onClick={newChat}>
+              New conversation
             </button>
           )}
         </div>

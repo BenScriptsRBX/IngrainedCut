@@ -337,7 +337,7 @@ export class CodexAgent extends CliAgent {
       return "This ChatGPT account's plan can't be used in other apps. Use a ChatGPT Plus or Pro plan, or add an OpenAI API key in Settings.";
     if (/subscription_sharing_(usage|user)_unavailable/.test(msg)) return 'ChatGPT plan usage is temporarily unavailable. Try again in a minute.';
     if (/subscription_sharing_unsupported_capability/.test(msg) && this.continuing)
-      return "This conversation used something a ChatGPT plan can't continue (such as Codex's sub-agents, which are now turned off on a plan). Start a new conversation (the + button at the top of the chat) and send your message again.";
+      return "This conversation used something a ChatGPT plan can't continue (such as Codex's sub-agents, which are now turned off on a plan). Start a new conversation (the button below, or New conversation at the top of the chat) and send your message again.";
     if (/subscription_sharing_unsupported_capability|subscription_sharing_route_not_supported/.test(msg))
       return `That request isn't supported on a ChatGPT plan (try another model). (${msg.slice(0, 300)})`;
     if (chatgpt.planReady() && /401|unauthori[sz]ed|incorrect api key/i.test(msg))

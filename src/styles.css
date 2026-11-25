@@ -473,6 +473,17 @@ kbd { background: #333; border: 1px solid #4a4a4a; border-bottom-width: 2px; bor
   .chat-head .agent-state-label, .chat-head .model-effort { display: none; }
   .chat-head .agent-state { padding: 0 7px; }
 }
+/* past chats, new conversation and close never get pushed past the edge: the title, the agents chip, the model and the
+   plan note shrink (or hide) first */
+.chat-head .chat-actions { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.chat-head .chat-title { flex-shrink: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chat-head .agents-ind { min-width: 0; flex-shrink: 2; }
+.chat-head .agents-btn { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.chat-head .grow { min-width: 0; }
+@container (max-width: 340px) {
+  .chat-head .plan-badge { display: none; }
+  .chat-head .agents-btn { margin-left: 2px; padding: 2px 6px; }
+}
 .hf-renders { position: fixed; right: 16px; bottom: 34px; display: flex; flex-direction: column; gap: 8px; z-index: 1500; }
 .hf-renders .export-progress { position: static; }
 .export-progress.hf { border-color: #5b4a8a; }

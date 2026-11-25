@@ -60,7 +60,12 @@ export function trackLabel(p: Project, t: Track | string | undefined) {
 export function findTrack(p: Project, ref: string | undefined | null): Track | undefined {
   if (!ref) return undefined;
   const r = ref.trim().toLowerCase();
-  return p.tracks.find((t) => t.id.toLowerCase() === r) || p.tracks.find((t) => trackLabel(p, t).toLowerCase() === r);
+  return (
+    p.tracks.find((t) => t.id.toLowerCase() === r) ||
+    p.tracks.find((t) => trackLabel(p, t).toLowerCase() === r) ||
+    // by name ("Narration", "Music"), as set by project_template or the track header
+    p.tracks.find((t) => t.name?.trim().toLowerCase() === r)
+  );
 }
 
 export function getTrack(p: Project, ref: string): Track {

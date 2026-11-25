@@ -2,6 +2,7 @@
 // and the standalone stdio MCP server (mcp/server.mjs) used by external Claude Code sessions.
 // `where` says who executes the tool: the renderer (owns the timeline state) or the main process.
 import { z } from 'zod';
+import { docTools, DOC_INSTRUCTIONS } from './docToolDefs.mjs';
 
 const n = () => z.number();
 const track = () => z.string().describe('Track name such as "V1", "V2", "A1", or a track id');
@@ -99,6 +100,8 @@ const clipProperties = z
   })
   .partial();
 
+const DOC_TOOLS = docTools({ z, n, track, time, TRANSITIONS });
+
 export const TOOL_DEFS = [
   {
     name: 'get_project_state',
@@ -119,7 +122,10 @@ export const TOOL_DEFS = [
     description:
       'Place a media item from the bin onto the timeline. Video with audio also places a linked audio clip on the matching audio track. Overwrites whatever is underneath unless mode="insert" (which ripples later clips right).',
     shape: {
-      media_id: z.string(),
+      media_id: z.string().optional().describe('Bin media id (or pass path)'),
+      path: z.string().optional().describe('A file to place: imported into the bin first if it is not there (place_clip)'),
+      volume_db: z.number().optional().describe('Gain of the placed audio in dB'),
+      credit: z.string().optional().describe('Source / music credit, listed by export_credits'),
       start: time('Timeline position').optional().describe('Timeline start in seconds; default = end of the target track'),
       track: track().optional().describe('Video track for visuals (default V1), audio track for audio-only media (default A1), or "auto" for the lowest video track that is free over the clip\'s time range'),
       audio_track: track().optional().describe('Audio track for the linked audio (default: same number as the video track)'),
@@ -256,9 +262,11 @@ export const TOOL_DEFS = [
     description:
       'Add a transition at a clip edge. edge="in" transitions from the previous adjacent clip on the same track (or from nothing); "out" transitions to nothing (e.g. fade to black at the end). Types: ' + TRANSITIONS.join(', '),
     shape: {
-      clip_ids: z.array(z.string()),
+      clip_ids: z.array(z.string()).optional(),
+      from_clip_id: z.string().optional().describe('With to_clip_id: the transition at the cut from this clip into the next one on its track'),
+      to_clip_id: z.string().optional(),
       edge: z.enum(['in', 'out', 'both']).optional().describe('default in'),
-      type: z.enum(TRANSITIONS).optional().describe('default cross-dissolve'),
+      type: z.string().optional().describe('default cross-dissolve. Also: cut (removes it), dissolve, dip_to_black (fade through black)'),
       duration: z.number().optional().describe('Seconds, default 1'),
     },
   },
@@ -297,11 +305,14 @@ export const TOOL_DEFS = [
   {
     name: 'markers',
     where: 'renderer',
-    description: 'Add, update or remove timeline markers (useful for notes, beats, chapters).',
+    description:
+      'Add or remove timeline markers (add_marker). kind "chapter" markers become YouTube chapters (export_chapters); "hold" marks a long hold the edit means to have, so qa_report does not flag it; name a marker "Hook" / "Climax" (or use those kinds) for the qa_report structure checks.',
     shape: {
       action: z.enum(['add', 'remove', 'clear']),
       time: z.number().optional(),
-      name: z.string().optional(),
+      name: z.string().optional().describe('Label'),
+      kind: z.enum(['chapter', 'hold', 'note', 'hook', 'climax', 'beat']).optional().describe('default note'),
+      duration: z.number().optional().describe('Seconds the marker spans (e.g. a hold)'),
       color: z.string().optional(),
       note: z.string().optional(),
       marker_id: z.string().optional(),
@@ -339,6 +350,11 @@ export const TOOL_DEFS = [
       start: z.number().optional(),
       end: z.number().optional(),
       count: z.number().optional().describe('Number of frames, default 12, max 30'),
+      every_s: z.number().optional().describe('One frame every N seconds between start and end instead of count (up to 60 frames)'),
+      times: z.array(z.number()).optional().describe('Exactly these times (up to 60)'),
+      cols: z.number().optional().describe('Columns (default by count)'),
+      width: z.number().optional().describe('Width of each frame in px, default 300'),
+      save_path: z.string().optional().describe('Also save the sheet as a PNG here'),
       media_id: z.string().optional().describe('Skim a bin media item instead of the sequence (times are then source times)'),
     },
   },
@@ -352,12 +368,14 @@ export const TOOL_DEFS = [
     name: 'detect_silence',
     where: 'main',
     description:
-      'Find silent parts in a media item or timeline clip. Returns ranges in source time and, for clips, in timeline time (ready for ripple_delete_ranges).',
+      'Find silent parts. With media_id or clip_id: in that media (ranges in source time and, for clips, timeline time, ready for ripple_delete_ranges). With neither: in the whole timeline mix as it will be exported (detect_silences), each with the chapter card / raw clip / hold it falls under.',
     shape: {
       media_id: z.string().optional(),
       clip_id: z.string().optional(),
-      threshold_db: z.number().optional().describe('Noise floor, default -35'),
-      min_duration: z.number().optional().describe('Minimum silence length (s), default 0.5'),
+      threshold_db: z.number().optional().describe('Noise floor, default -35 (-45 for the timeline mix)'),
+      min_duration: z.number().optional().describe('Minimum silence length (s), default 0.5 (0.4 for the timeline mix)'),
+      start: z.number().optional().describe('Timeline mix: from (s)'),
+      end: z.number().optional().describe('Timeline mix: to (s)'),
     },
   },
   {
@@ -370,14 +388,28 @@ export const TOOL_DEFS = [
     name: 'transcribe',
     where: 'main',
     description:
-      'Speech-to-text with timestamps for a media item or clip (Whisper via ffmpeg). Use it for cutting by what is said, finding quotes, making captions.',
-    shape: { media_id: z.string().optional(), clip_id: z.string().optional(), language: z.string().optional().describe('e.g. "en", default auto') },
+      'Speech-to-text with timestamps (Whisper via ffmpeg) for a media item, a clip, or a whole track (track "Narration" transcribes every clip on it in timeline time and adds words per minute, the pauses, and with script_path the differences from the script). Use it for cutting by what is said, finding quotes, captions, and checking narration against 03_script.md.',
+    shape: {
+      media_id: z.string().optional(),
+      clip_id: z.string().optional(),
+      track: track().optional().describe('Transcribe every clip on this track, in timeline time'),
+      script_path: z.string().optional().describe('With track: compare with this script (Markdown) and list missing / extra words'),
+      words: z.boolean().optional().describe('With track: also list every word with its (approximate) time'),
+      pause_s: z.number().optional().describe('With track: pauses at least this long are listed, default 0.6'),
+      language: z.string().optional().describe('e.g. "en", default auto'),
+    },
   },
   {
     name: 'analyze_loudness',
     where: 'main',
-    description: 'Measure integrated loudness (LUFS) and true peak of a media item, e.g. to normalise dialogue with volume_db.',
-    shape: { media_id: z.string() },
+    description:
+      'Measure loudness (EBU R128): with media_id that file (FFmpeg); without it the timeline mix as it will be exported, optionally over start/end: integrated LUFS, true peak, loudness range, and short-term LUFS for every second.',
+    shape: {
+      media_id: z.string().optional(),
+      start: z.number().optional(),
+      end: z.number().optional(),
+      per_second: z.boolean().optional().describe('Timeline: include short-term LUFS per second (default true)'),
+    },
   },
   {
     name: 'download_media',
@@ -451,9 +483,14 @@ export const TOOL_DEFS = [
   {
     name: 'export_video',
     where: 'renderer',
-    description: 'Render the sequence to a file. Shows progress to the user and returns when finished. Sizes up to 8K (8192 px on the long side), frame rates up to 240.',
+    description:
+      'Render the sequence to a file (render). Shows progress to the user and returns when finished, with the measured loudness of the exported mix. The mix is normalised when the sequence has a loudness target (normalize) or target_lufs is given. Presets: final_1080p, final_4k, proxy_720p, short_9x16 (a vertical sequence; build one with make_short). Sizes up to 8K, frame rates up to 240.',
     shape: {
-      path: z.string().describe('Absolute output path'),
+      path: z.string().optional().describe('Absolute output path (with a preset, default: exports/<project> (<preset>).mp4 next to the project)'),
+      preset: z.enum(['final_1080p', 'final_4k', 'proxy_720p', 'short_9x16']).optional(),
+      target_lufs: z.number().optional().describe('Normalise the mix to this integrated loudness (e.g. -14)'),
+      true_peak: z.number().optional().describe('With target_lufs: true-peak ceiling in dBTP, default -1'),
+      normalize: z.boolean().optional().describe('false: skip the sequence loudness target for this export'),
       format: z.enum(['mp4-h264', 'mp4-h265', 'mp4-av1', 'webm-vp9', 'mov-prores', 'mov-dnxhr', 'gif', 'mp3', 'm4a-aac', 'wav', 'flac']).optional(),
       quality: z.number().optional().describe('CRF-like, lower = better, default 18 (ignored with bitrate_mbps)'),
       bitrate_mbps: z.number().optional().describe('Target video bitrate in Mbps instead of quality'),
@@ -475,11 +512,22 @@ export const TOOL_DEFS = [
     description: 'Save the project (.icut). Without a path saves to the current file (or asks the user).',
     shape: { path: z.string().optional() },
   },
+  ...DOC_TOOLS,
 ];
+
+// tools that change the project take dry_run: they then only report what they would do
+const WRITES = new Set([
+  'add_clip', 'add_text', 'add_captions', 'add_color_matte', 'add_adjustment_layer', 'move_clip', 'trim_clip', 'split_clip', 'delete_clips', 'ripple_delete_range',
+  'ripple_delete_ranges', 'close_gaps', 'set_clip_properties', 'add_transition', 'remove_transition', 'set_keyframes', 'manage_tracks', 'markers', 'set_sequence_settings',
+  'batch', 'import_edl', 'import_cues', 'project_template', 'set_motion', 'j_cut', 'l_cut', 'add_text_card', 'add_panel', 'duck', 'breath', 'mute_music_under', 'fade',
+  'snap_to_beat', 'ambience_fill', 'normalize', 'restore',
+]);
+for (const d of TOOL_DEFS) if (WRITES.has(d.name) && !d.shape.dry_run) d.shape.dry_run = z.boolean().optional().describe('Only report what would change; change nothing');
 
 export const TOOL_NAMES = TOOL_DEFS.map((t) => t.name);
 
 export const SERVER_INSTRUCTIONS = `IngrainedCut is a non-linear video editor (Premiere Pro style) running on the user's computer. These tools read and edit its open project live; the user watches the timeline and program monitor update as you work.
 Conventions: all times are seconds (floats); tracks are named V1, V2… (V1 is the bottom video layer, higher numbers draw on top) and A1, A2…; clip ids look like "c12", media ids like "m3". A video clip and its audio are "linked" (same link id) and move/trim/split together.
 Workflow: read state (get_project_state), make edits (prefer batch / ripple_delete_ranges for many changes), then verify visually with capture_frame or capture_contact_sheet. Every tool call is one undo step for the user.
-Common jobs: cut out dead air with remove_silence (dry_run first to see the ranges); line up multicam / external-mic recordings with sync_clips (method "audio"); split at shot changes with detect_scenes + split_clip; grade with set_clip_properties → color_grade (exposure, highlights/shadows/whites/blacks, vibrance, wheels, curves), effects.temperature/tint/contrast/saturation and look (built-in LUTs), or auto_color as a starting point — grade one clip, then apply the same properties to matching clips, and check with capture_frame.`;
+Common jobs: cut out dead air with remove_silence (dry_run first to see the ranges); line up multicam / external-mic recordings with sync_clips (method "audio"); split at shot changes with detect_scenes + split_clip; grade with set_clip_properties → color_grade (exposure, highlights/shadows/whites/blacks, vibrance, wheels, curves), effects.temperature/tint/contrast/saturation and look (built-in LUTs), or auto_color as a starting point — grade one clip, then apply the same properties to matching clips, and check with capture_frame.
+${DOC_INSTRUCTIONS}`;

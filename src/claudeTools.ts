@@ -1,11 +1,11 @@
 // Executes IngrainedCut MCP tools against the editor state, and describes the timeline for Claude's context.
-import { mediaSrc } from './webBridge';
-import type { CallToolResult, Clip, KeyProp, Project, TextStyle, TransitionType } from './types';
-import { S, setS, commit, undo, redo, toast, applyStashedMedia } from './store';
+import { mediaSrc, isBrowserEngine } from './webBridge';
+import type { CallToolResult, Clip, KeyProp, MediaItem, Project, TextStyle, TransitionType } from './types';
+import { S, setS, commit, undo, redo, toast, applyStashedMedia, stripForFile } from './store';
 import {
   clipEnd, closeGaps, deleteClips, ensureTrack, expandLinked, findTrack, getClip, getTrack, linkedGroup, makeClip, mediaOf,
   placeMedia, razor, rippleDeleteRange, sequenceDuration, shiftClips, splitWithLinks, trackEnd, trackLabel, tracksOf, trimEnd,
-  trimStart, clearRegion, nid, assertUnlocked, maxSrc, setClipSpeed, DEFAULT_TEXT, DEFAULT_FX, DEFAULT_TRANSFORM,
+  trimStart, clearRegion, nid, assertUnlocked, maxSrc, setClipSpeed, DEFAULT_TEXT, DEFAULT_FX, DEFAULT_TRANSFORM, prevAdjacent, nextAdjacent,
 } from './ops';
 import { fmtTC, r3 } from './time';
 import { importPaths, freeVideoTrack, saveProject } from './actions';
@@ -18,6 +18,11 @@ import { ensureLook, gradeIsNeutral } from './grade';
 import { syncClips } from './sync';
 import { findSilences } from './cutTools';
 import { autoColor } from './colorActions';
+import {
+  addPanel, addTextCard, ambienceFill, applyCues, applyEdl, applyMotion, applyTemplate, breath, buildShort, checkEdl, clipGrid, cueRows, dirOf, duck,
+  edlRows, fadeClips, fakeMedia, findMedia, missingFiles, muteMusicUnder, nextGridPoint, parseCsv, parseStyle, shortFile, splitEdit, timelineListing,
+  timelineLoudness, timelineSilences, transitionType, type DocStyle,
+} from './docTools';
 
 // ---------------- describing state ----------------
 
@@ -203,6 +208,10 @@ const MUT: Record<string, { label: (a: any) => string; run: Mut }> = {
         videoTrackId: vt, audioTrackId: at, start, srcIn: a.source_in, srcOut: a.source_out, duration: a.duration,
         includeAudio: a.include_audio, includeVideo: a.include_video, mode: a.mode,
       });
+      for (const c of clips) {
+        if (a.volume_db != null && c.kind === 'audio') c.volume = Math.max(-60, Math.min(24, a.volume_db));
+        if (a.credit) c.meta = { ...(c.meta ?? {}), credit: a.credit };
+      }
       return { created: clips.map((c) => c.id) };
     },
   },
@@ -419,15 +428,32 @@ const MUT: Record<string, { label: (a: any) => string; run: Mut }> = {
   add_transition: {
     label: () => 'Claude: Add Transition',
     run: (d, a) => {
-      const type: TransitionType = a.type || 'cross-dissolve';
+      const t = transitionType(a.type || 'cross-dissolve');
       const edge = a.edge || 'in';
-      for (const id of a.clip_ids) {
-        const c = getClip(d, id);
-        const dur = Math.min(a.duration ?? 1, c.duration);
-        if (edge !== 'out') c.transitionIn = { type, duration: dur };
-        if (edge !== 'in') c.transitionOut = { type, duration: dur };
+      const ids: string[] = [...(a.clip_ids ?? [])];
+      // the transition at the cut from one clip into the next
+      const pair = !!(a.from_clip_id && a.to_clip_id);
+      if (pair) {
+        const from = getClip(d, a.from_clip_id);
+        const to = getClip(d, a.to_clip_id);
+        if (from.trackId !== to.trackId || Math.abs(clipEnd(from) - to.start) > 1 / d.settings.fps) throw new Error(`${from.id} and ${to.id} are not next to each other on one track`);
+        ids.push(to.id);
       }
-      return { ok: true };
+      if (!ids.length) throw new Error('Pass clip_ids, or from_clip_id and to_clip_id');
+      for (const id of ids) {
+        const c = getClip(d, id);
+        const inEdge = pair || edge !== 'out';
+        const outEdge = !pair && edge !== 'in';
+        if (t === 'cut') {
+          if (inEdge) c.transitionIn = null;
+          if (outEdge) c.transitionOut = null;
+          continue;
+        }
+        const dur = Math.min(a.duration ?? 1, c.duration);
+        if (inEdge) c.transitionIn = { type: t, duration: dur };
+        if (outEdge) c.transitionOut = { type: t, duration: dur };
+      }
+      return { ok: true, clips: ids, type: t };
     },
   },
   remove_transition: {
@@ -486,9 +512,15 @@ const MUT: Record<string, { label: (a: any) => string; run: Mut }> = {
         d.markers = d.markers.filter((m) => m.id !== a.marker_id && !(a.marker_id == null && a.time != null && Math.abs(m.time - a.time) < 0.01));
         return { ok: true };
       }
-      const m = { id: nid(d, 'k'), time: a.time ?? S().playhead, name: a.name || `Marker ${d.markers.length + 1}`, color: a.color || '#3bb26b', note: a.note };
+      const KIND_COLOR: Record<string, string> = { chapter: '#e0a400', hold: '#7f8fa6', note: '#3bb26b', hook: '#e63946', climax: '#b5179e', beat: '#4895ef' };
+      const kind: string | undefined = a.kind || undefined;
+      const m = {
+        id: nid(d, 'k'), time: a.time ?? S().playhead, name: a.name || `Marker ${d.markers.length + 1}`, color: a.color || KIND_COLOR[kind ?? 'note'] || '#3bb26b', note: a.note,
+        ...(kind ? { kind } : {}), ...(a.duration ? { duration: a.duration } : {}),
+      };
+      if (kind === 'chapter') d.markers = d.markers.filter((x) => !(x.kind === 'chapter' && Math.abs(x.time - m.time) < 0.05));
       d.markers.push(m);
-      return { marker: m.id };
+      return { marker: m.id, kind: kind ?? 'note' };
     },
   },
   set_playhead: {
@@ -527,7 +559,72 @@ const MUT: Record<string, { label: (a: any) => string; run: Mut }> = {
       return { selected: a.clip_ids };
     },
   },
+  // ---- documentary tools (docTools.ts) ----
+  project_template: {
+    label: () => 'Claude: Documentary Tracks',
+    run: (d, a) => {
+      if ((a.template ?? 'doc') !== 'doc') throw new Error('The only template is "doc"');
+      return { tracks: applyTemplate(d) };
+    },
+  },
+  set_motion: {
+    label: (a) => `Claude: Motion ${a.type}`,
+    run: (d, a) => {
+      const out: any[] = [];
+      for (const id of a.clip_ids ?? [a.clip_id]) {
+        const c = getClip(d, id);
+        assertUnlocked(d, c.trackId);
+        out.push({ clip: id, ...applyMotion(d, c, a.type, a.amount_pct ?? 3, a.ease ?? 'inOut', a.direction) });
+      }
+      return { clips: out };
+    },
+  },
+  j_cut: { label: () => 'Claude: J-Cut', run: (d, a) => ({ audio: splitEdit(d, a.clip_id, a.frames ?? 10, 'j') }) },
+  l_cut: { label: () => 'Claude: L-Cut', run: (d, a) => ({ audio: splitEdit(d, a.clip_id, a.frames ?? 10, 'l') }) },
+  add_text_card: {
+    label: (a) => `Claude: ${a.preset ?? 'Text Card'}`,
+    run: (d, a) => addTextCard(d, { preset: a.preset, text: a.text, subtitle: a.subtitle, at: a.at ?? S().playhead, dur: a.dur ?? 4, style: docStyle(a), marker: a.chapter_marker }),
+  },
+  add_panel: {
+    label: () => 'Claude: Panel',
+    run: (d, a) => {
+      const m = findMedia(d, a.src ?? '');
+      if (!m) throw new Error(`"${a.src}" is not in the bin (pass a media id or bin name; a file path is imported first when add_panel runs on its own, not inside batch)`);
+      return addPanel(d, { media: m, at: a.at ?? S().playhead, dur: a.dur ?? 5, position: a.position, scale: a.scale, push: a.push_pct, dim: a.dim, blur: a.blur, source_in: a.source_in });
+    },
+  },
+  duck: { label: (a) => (a.remove ? 'Claude: Remove Ducking' : 'Claude: Duck Music'), run: (d, a) => duck(d, a) },
+  breath: { label: () => 'Claude: Breath', run: (d, a) => breath(d, a) },
+  mute_music_under: { label: () => 'Claude: Mute Music Under', run: (d, a) => muteMusicUnder(d, a) },
+  fade: { label: () => 'Claude: Fade', run: (d, a) => fadeClips(d, a) },
+  ambience_fill: {
+    label: () => 'Claude: Ambience Fill',
+    run: (d, a) => {
+      let m = a.src ? findMedia(d, a.src) : undefined;
+      if (!a.src) {
+        const tr = a.track ? getTrack(d, a.track) : undefined;
+        const prev = d.clips.find((c) => c.meta?.role === 'ambience' && (!tr || c.trackId === tr.id));
+        m = prev ? mediaOf(d, prev) : undefined;
+      }
+      if (!m) throw new Error(a.src ? `"${a.src}" is not in the bin` : 'Pass src (the ambience file or bin item)');
+      return ambienceFill(d, { media: m, track: a.track, level_db: a.level_db, start: a.start, end: a.end, fade_s: a.fade_s, min_gap: a.min_gap, only_under: a.only_under });
+    },
+  },
+  normalize: {
+    label: () => 'Claude: Loudness Target',
+    run: (d, a) => {
+      d.settings.loudness = a.off ? null : { lufs: a.target_lufs ?? -14, truePeak: a.true_peak ?? -1 };
+      return { export_normalizes_to: d.settings.loudness ? `${d.settings.loudness.lufs} LUFS integrated, true peak ≤ ${d.settings.loudness.truePeak} dBTP` : 'off' };
+    },
+  },
 };
+
+let lastStyle: DocStyle | undefined;
+/** The card style: style.md text the main process found (`_style`), else the last one seen, else the defaults. */
+function docStyle(a: any): DocStyle {
+  if (a._style !== undefined) lastStyle = parseStyle(a._style || undefined);
+  return lastStyle ?? parseStyle();
+}
 
 // ---------------- frame capture ----------------
 
@@ -632,7 +729,6 @@ function contactSheet(a: any) {
 async function buildContactSheet(a: any) {
   const s = S();
   const p = s.project;
-  const count = Math.max(1, Math.min(30, Math.round(a.count ?? 12)));
   let start = a.start ?? 0;
   let end: number;
   let aspect = p.settings.width / p.settings.height;
@@ -643,10 +739,21 @@ async function buildContactSheet(a: any) {
     if (media.width) aspect = media.width / media.height;
   } else end = a.end ?? sequenceDuration(p);
   if (end <= start) end = start + 0.001;
-  const times = Array.from({ length: count }, (_, i) => (count === 1 ? start : start + ((end - start) * (i + 0.5)) / count));
-  const cols = count <= 3 ? count : count <= 8 ? 4 : count <= 15 ? 5 : 6;
+  const MAX = 60;
+  let times: number[];
+  if (Array.isArray(a.times) && a.times.length) times = a.times.slice(0, MAX).map(Number);
+  else if (a.every_s > 0) {
+    const n = Math.floor((end - start) / a.every_s) + 1;
+    if (n > MAX) throw new Error(`every_s ${a.every_s} gives ${n} frames; at most ${MAX} fit on one sheet — narrow start/end or use a larger every_s`);
+    times = Array.from({ length: n }, (_, i) => start + i * a.every_s);
+  } else {
+    const count = Math.max(1, Math.min(30, Math.round(a.count ?? 12)));
+    times = Array.from({ length: count }, (_, i) => (count === 1 ? start : start + ((end - start) * (i + 0.5)) / count));
+  }
+  const count = times.length;
+  const cols = Math.max(1, Math.min(12, a.cols ?? (count <= 3 ? count : count <= 8 ? 4 : count <= 15 ? 5 : 6)));
   const rows = Math.ceil(count / cols);
-  const tileW = 300;
+  const tileW = Math.max(120, Math.min(640, a.width ?? a.tile_width ?? 300));
   const tileH = Math.round(tileW / aspect);
   const labelH = 18;
   const sheet = document.createElement('canvas');
@@ -678,7 +785,11 @@ async function buildContactSheet(a: any) {
       label(i);
     });
   }
-  return { data: sheet.toDataURL('image/jpeg', 0.82).split(',')[1], times };
+  if (a.save_path) {
+    const blob = await new Promise<Blob>((res, rej) => sheet.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode the PNG'))), 'image/png'));
+    await window.icut.writePng(a.save_path, await blob.arrayBuffer());
+  }
+  return { data: sheet.toDataURL('image/jpeg', 0.82).split(',')[1], times, saved: a.save_path as string | undefined };
 }
 
 // ---------------- dispatcher ----------------
@@ -688,13 +799,34 @@ function applyAfter(after: { playhead?: number; select?: string[] }) {
   if (after.select) setS({ selection: after.select.filter((id) => S().project.clips.some((c) => c.id === id)) });
 }
 
-function runMutation(label: string, fn: (d: Project, after: any) => any) {
+/**
+ * Run an edit on a copy of the project and commit it as one undo step. dryRun: only report what would change.
+ * prepare: set-up on the copy that is not part of the change (stand-in media for a dry run).
+ */
+function runMutation(label: string, fn: (d: Project, after: any) => any, dryRun = false, prepare?: (d: Project) => void) {
   const before = S().project;
   const after: { playhead?: number; select?: string[] } = {};
   let result: any;
   const draft = structuredClone(before);
+  prepare?.(draft);
+  const base = prepare ? structuredClone(draft) : before;
   result = fn(draft, after);
-  const diff = diffSummary(before, draft);
+  const diff = diffSummary(base, draft);
+  if (dryRun) {
+    const had = new Set(base.markers.map((m) => m.id));
+    const newMarkers = draft.markers.filter((m) => !had.has(m.id));
+    return {
+      dry_run: true,
+      note: 'Nothing was changed: this is what the call would do.',
+      result,
+      ...(diff.added.length ? { would_add: diff.added } : {}),
+      ...(diff.changed.length ? { would_change: diff.changed.slice(0, 80) } : {}),
+      ...(diff.removed.length ? { would_remove: diff.removed } : {}),
+      ...(newMarkers.length ? { would_add_markers: newMarkers.map((m) => `${m.kind ?? 'note'} @ ${r3(m.time)} "${m.name}"`) } : {}),
+      ...(JSON.stringify(base.settings) !== JSON.stringify(draft.settings) ? { would_set: draft.settings } : {}),
+      sequence_duration_after: r3(sequenceDuration(draft)),
+    };
+  }
   const changedProject = JSON.stringify(before) !== JSON.stringify(draft);
   if (changedProject) commit(label, (d) => Object.assign(d, draft), { by: 'claude', flash: diff.ids });
   applyAfter(after);
@@ -706,25 +838,280 @@ function runMutation(label: string, fn: (d: Project, after: any) => any) {
   return out;
 }
 
+// ---------------- documentary tools that read files or analyse audio ----------------
+
+const GRID_KEY = { beat: 'beats', downbeat: 'downbeats', phrase: 'phrases' } as const;
+type GridKind = keyof typeof GRID_KEY;
+const gridKind = (g: any): GridKind => {
+  const k = String(g ?? 'downbeat').toLowerCase().replace(/s$/, '');
+  if (!(k in GRID_KEY)) throw new Error(`grid "${g}": use beat, downbeat or phrase`);
+  return k as GridKind;
+};
+const needText = (a: any, tool: string) => {
+  if (a._text == null) throw new Error(`${tool} reads the file on your computer, so it needs the IngrainedCut app or helper`);
+};
+const musicClips = (p: Project, trackRef?: string) => {
+  const tr = trackRef ? getTrack(p, trackRef) : p.tracks.find((t) => t.kind === 'audio' && t.name === 'Music') ?? tracksOf(p, 'audio')[2];
+  if (!tr) throw new Error('No music track: pass track (or music_clip_id)');
+  return p.clips.filter((c) => c.trackId === tr.id && c.kind === 'audio' && c.enabled).sort((x, y) => x.start - y.start);
+};
+
+/** Wait (up to `ms`) until the waveforms of the audio on `trackRef` (default Narration) are ready: ducking reads them. */
+async function waitForWaveforms(trackRef?: string, ms = 60_000) {
+  const t0 = Date.now();
+  for (;;) {
+    const p = S().project;
+    const tr = trackRef ? findTrack(p, trackRef) : p.tracks.find((t) => t.kind === 'audio' && t.name === 'Narration') ?? tracksOf(p, 'audio')[0];
+    const pending = p.clips.filter((c) => c.trackId === tr?.id).map((c) => mediaOf(p, c)).filter((m) => m && m.hasAudio && !m.peaks?.length && m.status !== 'error' && m.status !== 'missing');
+    if (!pending.length || Date.now() - t0 > ms) return pending.length === 0;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+}
+
+/** The paths that are files on disk (the rest are reported as "not found" by the import). */
+async function existing(paths: string[]) {
+  const ok = await Promise.all(paths.map((p) => window.icut.exists(p).catch(() => false)));
+  return paths.filter((_, i) => ok[i]);
+}
+
+const DOC_ASYNC: Record<string, (a: any) => Promise<CallToolResult>> = {
+  import_edl: async (a) => {
+    needText(a, 'import_edl');
+    const p0 = S().project;
+    const rows = edlRows(parseCsv(a._text), p0.settings.fps);
+    if (!rows.length) throw new Error(`${a.path}: no rows (the first line must be the column names)`);
+    const baseDir = dirOf(a.path);
+    const missing = await existing(missingFiles(p0, rows.flatMap((r) => [r.source, r.sfx.split('@')[0].trim()]), baseDir));
+    let imported: { id: string; name: string }[] = [];
+    if (missing.length && !a.dry_run) imported = (await importPaths(missing)).filter((m) => missing.some((x) => x.toLowerCase() === m.path.toLowerCase())).map((m) => ({ id: m.id, name: m.name }));
+    const style = docStyle(a);
+    return txt(
+      runMutation(
+        `Claude: Import EDL (${rows.length} rows)`,
+        (d) => ({
+          ...(imported.length ? { imported } : {}),
+          ...(a.dry_run && missing.length ? { would_import: missing } : {}),
+          card_style: style,
+          ...applyEdl(d, rows, { baseDir, style, replace: a.replace, template: a.template }),
+        }),
+        !!a.dry_run,
+        a.dry_run && missing.length ? (d) => fakeMedia(d, missing) : undefined,
+      ),
+    );
+  },
+  import_cues: async (a) => {
+    needText(a, 'import_cues');
+    const p0 = S().project;
+    const rows = cueRows(parseCsv(a._text), p0.settings.fps);
+    if (!rows.length) throw new Error(`${a.path}: no rows (the first line must be the column names)`);
+    const baseDir = dirOf(a.path);
+    const missing = await existing(missingFiles(p0, rows.map((r) => r.source), baseDir));
+    if (missing.length && !a.dry_run) await importPaths(missing);
+    // narration placed by this sheet: its waveform is computed in the background, and ducking needs it
+    if (!a.dry_run && rows.some((r) => r.duck)) {
+      const narr = rows.filter((r) => r.type === 'narration').map((r) => findMedia(S().project, r.source, baseDir)).filter(Boolean) as MediaItem[];
+      const t0 = Date.now();
+      while (narr.some((m) => !S().project.media.find((x) => x.id === m.id)?.peaks?.length) && Date.now() - t0 < 60_000) await new Promise((r) => setTimeout(r, 300));
+    }
+    let toSnap: { clip: string; grid: string }[] = [];
+    const out: any = runMutation(
+      `Claude: Import Cues (${rows.length} rows)`,
+      (d) => {
+        const r = applyCues(d, rows, { baseDir, replace: a.replace, template: a.template });
+        toSnap = r.to_snap;
+        const { to_snap, ...rest } = r;
+        return { ...(a.dry_run && missing.length ? { would_import: missing } : {}), ...rest, ...(to_snap.length ? { snapped_to_grid: to_snap } : {}) };
+      },
+      !!a.dry_run,
+      a.dry_run && missing.length ? (d) => fakeMedia(d, missing) : undefined,
+    );
+    // start the cues with a "snap" column on their next downbeat / phrase (slips the music, the cue keeps its place)
+    if (!a.dry_run && toSnap.length) {
+      const slips: { clip: string; in: number }[] = [];
+      const notes: string[] = [];
+      for (const t of toSnap) {
+        try {
+          const p = S().project;
+          const c = getClip(p, t.clip);
+          const g = await clipGrid(p, c);
+          const k = gridKind(t.grid);
+          const s = nextGridPoint(g.source[GRID_KEY[k]], c.in);
+          if (s != null && s - c.in < 8) slips.push({ clip: c.id, in: s });
+          else notes.push(`${c.id}: no ${k} within 8 s of its in point`);
+        } catch (e: any) {
+          notes.push(`${t.clip}: ${e.message}`);
+        }
+      }
+      if (slips.length)
+        runMutation('Claude: Cues on the Beat', (d) => {
+          for (const x of slips) {
+            const c = getClip(d, x.clip);
+            c.in = x.in;
+            const max = mediaOf(d, c)?.duration;
+            if (max && c.in + c.duration * c.speed > max) c.duration = Math.max(1 / d.settings.fps, (max - c.in) / c.speed);
+          }
+          return {};
+        });
+      out.snapped = slips.map((x) => ({ clip: x.clip, source_in: r3(x.in) }));
+      if (notes.length) out.snap_notes = notes;
+    }
+    return txt(out);
+  },
+  check_edl: async (a) => {
+    needText(a, 'check_edl');
+    const p = S().project;
+    return txt(checkEdl(p, edlRows(parseCsv(a._text), p.settings.fps), a.tolerance_frames ?? 1));
+  },
+  get_timeline: async (a) => txt(timelineListing(S().project, a)),
+  beat_grid: async (a) => {
+    const p = S().project;
+    const clips = a.clip_id ? [getClip(p, a.clip_id)] : musicClips(p, a.track);
+    if (!clips.length) throw new Error('No music clips to analyse');
+    const grids: any[] = [];
+    for (const c of clips) {
+      const { source, ...g } = await clipGrid(p, c);
+      grids.push(a.detail === 'summary' ? { ...g, beats: g.beats.length, downbeats: g.downbeats.slice(0, 64), phrases: g.phrases } : g);
+    }
+    let markers: number | undefined;
+    if (a.markers && a.markers !== 'none') {
+      const k = gridKind(a.markers);
+      const times = grids.flatMap((g: any) => (Array.isArray(g[GRID_KEY[k]]) ? g[GRID_KEY[k]] : []));
+      runMutation(`Claude: ${k} markers`, (d) => {
+        d.markers = d.markers.filter((m) => m.kind !== 'beat');
+        for (const t of times) d.markers.push({ id: nid(d, 'k'), time: t, name: k, color: '#4895ef', kind: 'beat' });
+        return {};
+      });
+      markers = times.length;
+    }
+    return txt({ grids, ...(markers != null ? { markers_added: markers } : {}), note: 'Times are timeline seconds. Beat tracking is automatic: check the downbeats by ear on tracks with a soft intro.' });
+  },
+  snap_to_beat: async (a) => {
+    const p = S().project;
+    const c = getClip(p, a.clip_id);
+    const k = gridKind(a.grid);
+    const onMusic = musicClips(p, a.track).some((m) => m.id === c.id);
+    if (onMusic && a.target != null) {
+      // move this music clip so one of its downbeats lands on `target`
+      const g: any = await clipGrid(p, c);
+      const list: number[] = g[GRID_KEY[k]];
+      if (!list.length) throw new Error(`No ${k}s found in ${c.id}`);
+      const near = list.reduce((x, y) => (Math.abs(y - a.target) < Math.abs(x - a.target) ? y : x));
+      const delta = a.target - near;
+      return txt(runMutation('Claude: Music on the Beat', (d) => ({ grid: k, moved_by: r3(delta), ...MUT.move_clip.run(d, { clip_id: c.id, start: c.start + delta }, {}) }), !!a.dry_run));
+    }
+    const sources = a.music_clip_id ? [getClip(p, a.music_clip_id)] : musicClips(p, a.track);
+    const times: number[] = [];
+    for (const m of sources) times.push(...((await clipGrid(p, m)) as any)[GRID_KEY[k]]);
+    if (!times.length) throw new Error('No music clips with a beat to snap to (pass music_clip_id or track)');
+    const edge = a.edge === 'end' ? clipEnd(c) : c.start;
+    const near = times.reduce((x, y) => (Math.abs(y - edge) < Math.abs(x - edge) ? y : x));
+    const max = a.max_shift ?? 0.75;
+    if (Math.abs(near - edge) > max) throw new Error(`The nearest ${k} is ${r3(near)} s, ${r3(Math.abs(near - edge))} s away (max_shift ${max})`);
+    const mode = a.mode ?? 'move';
+    return txt(
+      runMutation(
+        `Claude: Snap to ${k}`,
+        (d) => {
+          const cc = getClip(d, c.id);
+          if (mode === 'move') return { grid: k, at: near, ...MUT.move_clip.run(d, { clip_id: cc.id, start: cc.start + (near - edge) }, {}) };
+          if (mode !== 'roll') throw new Error('mode: move or roll');
+          // roll the cut: this clip's edge and its neighbour's move together
+          const fps = d.settings.fps;
+          const nb = a.edge === 'end' ? nextAdjacent(d, cc, fps) : prevAdjacent(d, cc, fps);
+          if (!nb) throw new Error(`${cc.id} has no clip right next to it on that side to roll against`);
+          const later = a.edge === 'end' ? nb : cc;
+          const earlier = a.edge === 'end' ? cc : nb;
+          if (near > later.start) {
+            MUT.trim_clip.run(d, { clip_id: later.id, new_start: near }, {});
+            MUT.trim_clip.run(d, { clip_id: earlier.id, new_end: near }, {});
+          } else {
+            MUT.trim_clip.run(d, { clip_id: earlier.id, new_end: near }, {});
+            MUT.trim_clip.run(d, { clip_id: later.id, new_start: near }, {});
+          }
+          return { grid: k, cut_at: r3(near) };
+        },
+        !!a.dry_run,
+      ),
+    );
+  },
+  _project_json: async () => txt(JSON.stringify(stripForFile(S().project))),
+  _restore_project: async (a) => {
+    const snap: Project = a.project;
+    const cur = new Map(S().project.media.map((m) => [m.id, m]));
+    commit(
+      `Claude: Restore "${a.label ?? 'snapshot'}"`,
+      (d) => {
+        const keep = { path: d.path, name: d.name };
+        Object.assign(d, structuredClone(snap), keep);
+        d.media = d.media.map((m) => {
+          const c = cur.get(m.id);
+          return c && c.path === m.path ? { ...m, peaks: c.peaks, sprite: c.sprite, thumb: c.thumb, url: c.url, audioUrl: c.audioUrl, status: c.status } : m;
+        });
+      },
+      { by: 'claude' },
+    );
+    applyStashedMedia();
+    return txt({ restored: a.label ?? true, clips: S().project.clips.length, duration: r3(sequenceDuration(S().project)) });
+  },
+  _build_short: async (a) => {
+    const d = buildShort(S().project, { start: a.start, end: a.end, layout: a.layout, captions: a.captions, title: a.title, style: docStyle(a) });
+    await window.icut.saveProject(a.path, shortFile(d, a.path));
+    return txt({ saved: a.path, size: `${d.settings.width}x${d.settings.height}`, duration: r3(sequenceDuration(d)), clips: d.clips.length, captions: d.clips.filter((c) => c.meta?.role === 'caption').length });
+  },
+};
+
 export async function runTool(name: string, a: any): Promise<CallToolResult> {
   const s = S();
-  if (MUT[name]) return txt(runMutation(MUT[name].label(a), (d, after) => MUT[name].run(d, a, after)));
+  if (DOC_ASYNC[name]) return DOC_ASYNC[name](a);
+  if (name === 'duck' && !a.remove) await waitForWaveforms(a.key_track, 30_000);
+  if (MUT[name]) {
+    // a file path where a bin item is expected: import it first (a dry run uses a stand-in instead)
+    const key = name === 'add_clip' ? 'path' : name === 'add_panel' || name === 'ambience_fill' ? 'src' : null;
+    let fake: string[] = [];
+    if (key && a[key] && !findMedia(s.project, a[key])) {
+      if (a.dry_run) fake = [a[key]];
+      else {
+        const [m] = await importPaths([a[key]]);
+        if (!m) throw new Error(`Could not import ${a[key]}`);
+        a = { ...a, [key]: m.id };
+      }
+    }
+    return txt(
+      runMutation(
+        MUT[name].label(a),
+        (d, after) => {
+          let args = a;
+          if (key && a[key]) {
+            const m = findMedia(d, a[key]);
+            if (name === 'add_clip' && m) args = { ...a, media_id: m.id };
+          }
+          return MUT[name].run(d, args, after);
+        },
+        !!a.dry_run && name !== 'remove_silence',
+        fake.length ? (d) => fakeMedia(d, fake) : undefined,
+      ),
+    );
+  }
   switch (name) {
     case 'get_project_state':
       return txt(a.detail === 'summary' ? describeProject(s.project, { playhead: s.playhead, selection: s.selection }) : fullJson(s.project));
     case 'batch': {
       const ops: { tool: string; args: any }[] = a.operations || [];
+      if (a._style !== undefined) docStyle(a);
       for (const op of ops) if (!MUT[op.tool]) throw new Error(`"${op.tool}" cannot be used inside batch. Allowed: ${Object.keys(MUT).join(', ')}`);
       const label = `Claude: ${ops.length} edits`;
       return txt(
-        runMutation(label, (d, after) =>
-          ops.map((op, i) => {
-            try {
-              return { step: i + 1, tool: op.tool, ...MUT[op.tool].run(d, op.args || {}, after) };
-            } catch (e: any) {
-              throw new Error(`Step ${i + 1} (${op.tool}) failed: ${e.message}. No changes were applied.`);
-            }
-          }),
+        runMutation(
+          label,
+          (d, after) =>
+            ops.map((op, i) => {
+              try {
+                return { step: i + 1, tool: op.tool, ...MUT[op.tool].run(d, op.args || {}, after) };
+              } catch (e: any) {
+                throw new Error(`Step ${i + 1} (${op.tool}) failed: ${e.message}. No changes were applied.`);
+              }
+            }),
+          !!a.dry_run,
         ),
       );
     }
@@ -738,9 +1125,16 @@ export async function runTool(name: string, a: any): Promise<CallToolResult> {
       return { content: [{ type: 'image', data, mimeType: 'image/jpeg' }, { type: 'text', text: `Program output at ${r3(t)}s (${fmtTC(t, s.project.settings.fps)})` }] };
     }
     case 'capture_contact_sheet': {
-      const { data, times } = await contactSheet(a);
-      return { content: [{ type: 'image', data, mimeType: 'image/jpeg' }, { type: 'text', text: `${times.length} frames at ${a.media_id ? 'source' : 'timeline'} times: ${times.map((t) => t.toFixed(2)).join(', ')}` }] };
+      const { data, times, saved } = await contactSheet(a);
+      return { content: [{ type: 'image', data, mimeType: 'image/jpeg' }, { type: 'text', text: `${times.length} frames at ${a.media_id ? 'source' : 'timeline'} times: ${times.map((t) => t.toFixed(2)).join(', ')}${saved ? `\nSaved as ${saved}` : ''}` }] };
     }
+    case 'analyze_loudness':
+      // the timeline mix (a media item is measured by the engine with FFmpeg)
+      if (a.media_id) throw new Error('Measuring a single file needs the IngrainedCut helper. Without media_id this measures the timeline mix.');
+      return txt({ ...(await timelineLoudness(s.project, a)), ...(s.project.settings.loudness ? { export_normalizes_to: s.project.settings.loudness } : {}) });
+    case 'detect_silence':
+      if (a.media_id || a.clip_id) throw new Error('Silence in a single file needs the IngrainedCut helper. Without media_id / clip_id this looks at the timeline mix.');
+      return txt(await timelineSilences(s.project, a));
     case 'screenshot_editor': {
       // web version: the browser tab renders itself (the desktop app captures its window natively)
       const { toJpeg } = await import('html-to-image');
@@ -786,11 +1180,32 @@ export async function runTool(name: string, a: any): Promise<CallToolResult> {
     }
     case 'export_video': {
       const seq = S().project.settings;
+      if (a.preset) {
+        const P: Record<string, any> = {
+          final_1080p: { format: 'mp4-h264', height: 1080, quality: 18 },
+          final_4k: { format: 'mp4-h264', height: 2160, quality: 18 },
+          proxy_720p: { format: 'mp4-h264', height: 720, quality: 26 },
+          short_9x16: { format: 'mp4-h264', height: 1920, quality: 18 },
+        };
+        const pr = P[a.preset];
+        if (!pr) throw new Error(`preset: ${Object.keys(P).join(', ')}`);
+        if (a.preset === 'short_9x16' && !(seq.height > seq.width)) throw new Error('This sequence is not vertical. Build the Short with make_short, open that project, then export it with preset short_9x16.');
+        if (a.preset !== 'short_9x16' && seq.height > seq.width) pr.height = undefined;
+        a = { ...pr, ...a, format: a.format ?? pr.format, height: a.height ?? pr.height, quality: a.quality ?? pr.quality };
+        if (!a.path) {
+          const proj = S().project.path;
+          if (!proj || isBrowserEngine()) throw new Error('Pass path (the project has no folder to put the export in)');
+          const dir = dirOf(proj);
+          a.path = `${dir}${dir.includes('\\') ? '\\' : '/'}exports${dir.includes('\\') ? '\\' : '/'}${S().project.name} (${a.preset}).mp4`;
+        }
+      }
+      if (!a.path) throw new Error('Pass path (or a preset, which names the file next to the project)');
       const r = await runExport({
         path: a.path,
         format: a.format,
         quality: a.quality,
         range: a.range,
+        loudness: a.normalize === false ? null : a.target_lufs != null ? { lufs: a.target_lufs, truePeak: a.true_peak ?? -1 } : undefined,
         scale: a.height ? a.height / seq.height : a.scale,
         fps: a.fps,
         bitrate: a.bitrate_mbps ? a.bitrate_mbps * 1e6 : undefined,
@@ -801,7 +1216,7 @@ export async function runTool(name: string, a: any): Promise<CallToolResult> {
         sampleRate: a.sample_rate,
         bitDepth: a.bit_depth,
       });
-      return txt({ exported: r.path, size_mb: r3(r.size / 1e6), render_seconds: r3(r.seconds), encoder: r.engine });
+      return txt({ exported: r.path, size_mb: r3(r.size / 1e6), render_seconds: r3(r.seconds), encoder: r.engine, ...(r.loudness ? { loudness: r.loudness } : {}) });
     }
     case 'save_project': {
       const p = await saveProject(false, a.path);

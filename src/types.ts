@@ -183,6 +183,31 @@ export interface Clip {
   keyframes?: Partial<Record<KeyProp, Keyframe[]>>;
   chromaKey?: ChromaKey;
   grade?: ColorGrade;
+  /** where the clip came from and what it is for (documentary tools: EDL row, credit, role) */
+  meta?: ClipMeta;
+}
+
+export interface ClipMeta {
+  /** EDL row id (import_edl) */
+  edl?: string;
+  /** cue row id (import_cues) */
+  cue?: string;
+  /** source / music / art credit */
+  credit?: string;
+  /** a long hold the edit means to have (not flagged by qa_report) */
+  hold?: boolean;
+  /** footage, raw, recreation, panel, card, card_bg, music, sfx, ambience, narration, clip_audio… */
+  role?: string;
+  /** text card preset (add_text_card) */
+  preset?: string;
+  /**
+   * Volume envelopes added by duck / breath / mute_music_under / fade (clip-local [t, dB] points, summed with
+   * `gainBase`, the clip's own volume keyframes before any of them). `gainOut` is what was last written, so a
+   * manual keyframe edit is noticed and becomes the new base.
+   */
+  gainBase?: Keyframe[] | null;
+  gainLayers?: Record<string, [number, number][]>;
+  gainOut?: string;
 }
 
 export interface Track {
@@ -203,6 +228,10 @@ export interface Marker {
   name: string;
   color: string;
   note?: string;
+  /** chapter (YouTube chapters), hold (a deliberate long hold), note, beat… */
+  kind?: string;
+  /** seconds the marker spans (0 or missing: a point) */
+  duration?: number;
 }
 
 export interface SequenceSettings {
@@ -212,6 +241,8 @@ export interface SequenceSettings {
   fps: number;
   sampleRate: number;
   background: string;
+  /** export normalises the mix to this (two-pass: measure, gain, true-peak limit); null/missing = off */
+  loudness?: { lufs: number; truePeak: number } | null;
 }
 
 export interface Project {

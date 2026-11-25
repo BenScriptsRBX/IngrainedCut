@@ -209,17 +209,43 @@ export async function detectSilence(filePath, { thresholdDb = -35, minDuration =
   return out;
 }
 
-export async function detectScenes(filePath, { threshold = 0.3 } = {}) {
+export async function detectScenes(filePath, { threshold = 0.3, start, end } = {}) {
+  const win = [];
+  if (start != null) win.push('-ss', String(start));
+  if (end != null) win.push('-to', String(end));
   const { stderr } = await run(FFMPEG, [
-    '-v', 'info', '-nostats', '-i', filePath, '-an',
+    '-v', 'info', '-nostats', ...win, '-i', filePath, '-an',
     '-vf', `scale=320:-2,select='gt(scene,${threshold})',showinfo`, '-f', 'null', '-',
   ]);
   const cuts = [];
   for (const line of stderr.split(/\r?\n/)) {
     const m = line.match(/Parsed_showinfo.*pts_time:([\d.]+)/);
-    if (m) cuts.push(Math.round(parseFloat(m[1]) * 1000) / 1000);
+    if (m) cuts.push(Math.round((parseFloat(m[1]) + (start || 0)) * 1000) / 1000);
   }
   return cuts;
+}
+
+/** Frozen stretches (FFmpeg freezedetect) in source seconds, optionally inside [start, end]. */
+export async function detectFreezes(filePath, { minDuration = 10, noiseDb = -60, start, end } = {}) {
+  const win = [];
+  if (start != null) win.push('-ss', String(start));
+  if (end != null) win.push('-to', String(end));
+  const { stderr } = await run(FFMPEG, ['-v', 'info', '-nostats', ...win, '-i', filePath, '-an', '-vf', `scale=320:-2,freezedetect=n=${noiseDb}dB:d=${minDuration}`, '-f', 'null', '-']);
+  const out = [];
+  let cur = null;
+  const off = start || 0;
+  for (const line of stderr.split(/\r?\n/)) {
+    let m = line.match(/freeze_start:\s*([\d.]+)/);
+    if (m) cur = { start: parseFloat(m[1]) + off };
+    m = line.match(/freeze_end:\s*([\d.]+)/);
+    if (m && cur) {
+      cur.end = parseFloat(m[1]) + off;
+      out.push(cur);
+      cur = null;
+    }
+  }
+  if (cur) out.push({ start: cur.start, end: end ?? null });
+  return out;
 }
 
 function escapeFilterPath(p) {

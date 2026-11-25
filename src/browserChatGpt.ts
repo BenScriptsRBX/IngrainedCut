@@ -12,7 +12,11 @@ import { hasExtensionYtdlp } from './extensionYtdlp';
 
 const NS = 'ingrainedcut';
 const MAX_STEPS = 80; // tool rounds in one turn
-const HELPER_ONLY = ['wait_for_prompt', 'send_reply', 'detect_silence', 'detect_scenes', 'transcribe', 'analyze_loudness', 'render_composition'];
+const HELPER_ONLY = [
+  'wait_for_prompt', 'send_reply', 'detect_scenes', 'transcribe', 'render_composition',
+  // documentary tools that read files on the user's computer or run FFmpeg
+  'import_edl', 'import_cues', 'check_edl', 'detect_cuts', 'detect_freezes', 'qa_report', 'export_chapters', 'export_credits', 'make_short', 'snapshot', 'restore',
+];
 const SKIP = new Set([...HELPER_ONLY, ...(hasExtensionYtdlp() ? [] : ['download_media'])]);
 
 const GUIDE = (() => {
@@ -26,7 +30,7 @@ const GUIDE = (() => {
 You can't create files or run commands in this chat, only use the ingrainedcut tools. Build titles, lower thirds and simple motion graphics from add_text, add_color_matte, set_keyframes, transitions and effects, and check them with capture_frame.
 
 # Running in the browser
-This editor runs in the user's web browser without the IngrainedCut helper. Transcription and speech captions, silence detection (remove_silence), scene detection, loudness analysis${hasExtensionYtdlp() ? '' : ', downloading videos from links (download_media)'} and HyperFrames compositions need the helper on the user's computer, so those tools are not available here. If the user asks for one, say so and point them to https://www.ingrainedcut.com/download to set up the helper.${hasExtensionYtdlp() ? `
+This editor runs in the user's web browser without the IngrainedCut helper. Transcription and speech captions, scene detection, measuring single files (analyze_loudness / detect_silence with media_id or clip_id: without them they measure the timeline mix, which works here), the documentary file tools (import_edl, import_cues, qa_report, make_short, snapshots)${hasExtensionYtdlp() ? '' : ', downloading videos from links (download_media)'} and HyperFrames compositions need the helper on the user's computer, so those tools are not available here. If the user asks for one, say so and point them to https://www.ingrainedcut.com/download to set up the helper.${hasExtensionYtdlp() ? `
 
 download_media works here: the IngrainedCut extension runs yt-dlp in the browser. It downloads the whole video (start/end become the clip's source in/out when you place it), and large or long videos take a while.` : ''}
 

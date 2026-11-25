@@ -20,6 +20,7 @@ import { userDataDir, documentsDir } from './paths.mjs';
 import { keyFor, hasContent, writeSnapshot, listAutosaves, summarize, isAutosaveFile } from './autosave.mjs';
 import * as chatgpt from './chatgptAuth.mjs';
 import { ChatGptAgent } from './chatgptAgent.mjs';
+import { createDocTools, findStyle } from './docTools.mjs';
 
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -90,7 +91,15 @@ export function createCore(host) {
   const toTimeline = (clip, s) => clip.start + (s - clip.in) / (clip.speed || 1);
   const clipSourceWindow = (clip) => [clip.in, clip.in + clip.duration * (clip.speed || 1)];
 
+  const doc = createDocTools({ callRenderer, emit });
+
   async function runMainTool(name, args) {
+    const docResult = await doc.run(name, args);
+    if (docResult) return docResult;
+    // the timeline mix is measured in the editor; a media item here with FFmpeg
+    if (name === 'analyze_loudness' && !args.media_id) return callRenderer('analyze_loudness', args);
+    if (name === 'detect_silence' && !args.media_id && !args.clip_id) return callRenderer('detect_silence', args);
+    if (name === 'transcribe' && args.track) return text(await doc.transcribeTrack(args));
     switch (name) {
       case 'screenshot_editor': {
         const data = host.screenshot ? await host.screenshot() : null;
@@ -173,6 +182,11 @@ export function createCore(host) {
     const relayed = provider() === 'relay' && agents.relay.linked(client);
     const id = `relay-${++relayCalls}`;
     if (relayed) agents.relay.toolUse(id, name, args);
+    // text cards inside a batch use the channel style too
+    if (name === 'batch' && args.operations?.some?.((o) => o?.tool === 'add_text_card')) {
+      const dir = mirror?.path && path.isAbsolute(mirror.path) ? path.dirname(mirror.path) : null;
+      args = { ...args, _style: findStyle(undefined, dir).text };
+    }
     const res = def.where === 'main' ? await runMainTool(name, args) : await callRenderer(name, args);
     if (relayed) agents.relay.toolResult(id, res);
     emit('agent:tool-activity', { name, args });
@@ -737,7 +751,10 @@ export function createCore(host) {
     if (/^https:\/\//.test(url)) host.shell.openExternal(url);
   });
   handle('fs:exists', (p) => fs.existsSync(p));
-  handle('fs:write-png', ({ path: p, data }) => fs.writeFileSync(p, Buffer.from(data)));
+  handle('fs:write-png', ({ path: p, data }) => {
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, Buffer.from(data));
+  });
   on('win:devtools', () => host.window?.devtools());
   on('win:reload', () => host.window?.reload());
 

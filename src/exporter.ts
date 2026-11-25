@@ -6,6 +6,7 @@ import { clipEnd, mediaOf, sequenceDuration } from './ops';
 import type { MediaItem, Project } from './types';
 import { S, setS, toast } from './store';
 import { ExportFrames } from './exportFrames';
+import { measureBuffer, normalizeBuffer } from './loudness';
 import { saveTarget, saveBlob, download } from './browserEngine';
 import {
   AudioBufferSource, BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality, StreamTarget, WebMOutputFormat, canEncodeAudio, canEncodeVideo,
@@ -40,6 +41,8 @@ export interface ExportOptions {
   sampleRate?: number;
   /** WAV bit depth */
   bitDepth?: 16 | 24;
+  /** normalise the mix (default: the sequence's loudness setting); null = don't */
+  loudness?: { lufs: number; truePeak: number } | null;
 }
 
 let cancelled = false;
@@ -198,7 +201,7 @@ async function exportInBrowser(x: {
   const { p, o, W, H, fps, format, frames, frameTimes } = x;
   const name = o.path.split(/[\\/]/).pop() || 'export';
   if (!BROWSER_FORMATS.includes(format)) throw new Error('This format needs the IngrainedCut helper on your computer. In the browser you can export H.264, HEVC, AV1, VP9 or WAV.');
-  const mix = await renderMix(p, x.a, x.b, o.sampleRate ?? 48000);
+  const mix = await masterMix(p, o, await renderMix(p, x.a, x.b, o.sampleRate ?? 48000));
   if (format === 'wav') {
     const blob = new Blob([encodeWav(mix)], { type: 'audio/wav' });
     await saveBlob(name, blob);
@@ -271,6 +274,25 @@ export interface ExportResult {
   size: number;
   seconds: number;
   engine: 'webcodecs' | 'ffmpeg';
+  /** the exported mix, measured (and what normalising did) */
+  loudness?: any;
+}
+
+let lastLoudness: any = null;
+/** Normalise the finished mix to the loudness target (two-pass: measure, gain, true-peak limit) and measure it. */
+async function masterMix(p: Project, o: ExportOptions, mix: AudioBuffer) {
+  lastLoudness = null;
+  const target = o.loudness === undefined ? p.settings.loudness : o.loudness;
+  try {
+    if (target) {
+      setS({ exportJob: { progress: 0, phase: `Normalising the mix to ${target.lufs} LUFS…`, path: o.path } });
+      const r = await normalizeBuffer(mix, target.lufs, target.truePeak);
+      lastLoudness = { target: `${target.lufs} LUFS / ${target.truePeak} dBTP`, gain_db: r.applied_gain_db, limited: r.limited, before: r.before, ...r.after };
+    } else lastLoudness = (await measureBuffer(mix)).summary();
+  } catch (e) {
+    console.warn('loudness', e);
+  }
+  return mix;
 }
 
 export async function runExport(o: ExportOptions): Promise<ExportResult> {
@@ -297,14 +319,14 @@ export async function runExport(o: ExportOptions): Promise<ExportResult> {
   const started = performance.now();
   const done = (r: { path: string; size: number }, engine: ExportResult['engine']): ExportResult => {
     toast(`Exported ${r.path.split(/[\/]/).pop()} (${(r.size / 1e6).toFixed(1)} MB)`, 'success', 6000);
-    return { ...r, seconds: (performance.now() - started) / 1000, engine };
+    return { ...r, seconds: (performance.now() - started) / 1000, engine, ...(lastLoudness ? { loudness: lastLoudness } : {}) };
   };
   try {
     if (isBrowserEngine()) {
       const r = await exportInBrowser({ p, o, a, b, W, H, fps, format, quality, frames, frameTimes, progress });
       return done(r, 'webcodecs');
     }
-    const wav = format !== 'gif' ? encodeWav(await renderMix(p, a, b, sampleRate)) : null;
+    const wav = format !== 'gif' ? encodeWav(await masterMix(p, o, await renderMix(p, a, b, sampleRate))) : null;
     const enc = { audioBitrate: o.audioBitrate, bitDepth: o.bitDepth, proresProfile: o.proresProfile, dnxhrProfile: o.dnxhrProfile, bitrate: o.bitrate };
 
     // ---- fast path: WebCodecs decode + hardware encode, ffmpeg only muxes ----

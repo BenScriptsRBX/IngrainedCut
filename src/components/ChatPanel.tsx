@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   useChat, sendMessage, stop, newChat, setModel, answerPermission, revertTurn, MODELS, EFFORTS, modelLabel, claudeModel, setDraft, setBypass, setMultiAgent,
-  attachChat, detachChat, continueChat, type ChatItem, PROVIDERS, AGENT_CHOICES, setProvider, agentName, loadCatalog, type Provider,
+  attachChat, detachChat, continueChat, type ChatItem, PROVIDERS, AGENT_CHOICES, setProvider, agentName, loadCatalog, type Provider, externalState, countAgents,
 } from '../chatStore';
 import { useEditor, setS } from '../store';
 import { sequenceDuration } from '../ops';
@@ -548,14 +548,19 @@ function AgentsIndicator() {
   }, [open]);
   const subs = Object.values(agents);
   const running = subs.filter((a) => a.status === 'running' || a.status === 'pending');
-  const extActive = externals.filter((e) => Date.now() - e.last < 90_000);
-  const count = (busy ? 1 : 0) + running.length + extActive.length;
-  if (!count && !subs.length) return null;
+  const now = Date.now();
+  // only what is doing something right now counts: the main agent mid-turn, running sub-agents, outside sessions mid-call
+  const { working: count, connected: extActive, label } = countAgents({ busy, runningSubagents: running.length, externals }, now);
+  if (!count && !subs.length && !extActive.length) return null;
   return (
     <div className="agents-ind" ref={ref}>
-      <button className={'agents-btn' + (count > 1 ? ' multi' : count ? ' one' : '')} onClick={() => setOpen(!open)} title="Agents working on this project">
+      <button
+        className={'agents-btn' + (count > 1 ? ' multi' : count ? ' one' : '')}
+        onClick={() => setOpen(!open)}
+        title={count ? 'Agents working on this project right now' : 'Nothing is working on this project right now'}
+      >
         <span className="agents-pulse" />
-        {count === 0 ? 'idle' : count === 1 ? '1 agent' : `${count} agents`}
+        {label}
       </button>
       {open && (
         <div className="agents-pop">
@@ -573,24 +578,34 @@ function AgentsIndicator() {
               <span className="ag-main">
                 <b>{a.type || 'agent'}</b> <span className="dim">{a.description}</span>
                 <span className="ag-sub">
-                  {a.status === 'running' ? `now: ${shortTool(a.lastTool) || 'starting'}` : a.status} · {a.toolUses} tools · {ago(a.started)}
+                  {a.status === 'running' ? `now: ${shortTool(a.lastTool) || 'starting'}` : a.status} · {a.toolUses} tools · {ago(a.ended ?? a.started)}
                 </span>
               </span>
             </div>
           ))}
-          <div className="mp-h">Other Claude Code sessions (MCP)</div>
+          <div className="mp-h">Outside sessions (MCP)</div>
           {extActive.length ? (
-            extActive.map((e) => (
-              <div key={e.id} className="ag-row">
-                <span className={'ag-dot ' + (Date.now() - e.last < 20_000 ? 'run' : 'idle')} />
-                <span className="ag-main">
-                  <b>{e.name}</b> <span className="dim">{e.id}</span>
-                  <span className="ag-sub">
-                    {e.calls} edits · last {shortTool(e.lastTool) || 'connected'} {ago(e.last)} ago
+            extActive.map((e) => {
+              const st = externalState(e, now);
+              return (
+                <div key={e.id} className="ag-row">
+                  <span className={'ag-dot ' + (st === 'working' ? 'run' : 'idle')} />
+                  <span className="ag-main">
+                    <b>{e.name}</b> <span className="dim">{e.id}</span>
+                    <span className="ag-sub">
+                      {st === 'working'
+                        ? `working · now: ${shortTool(e.lastTool) || 'a tool'}`
+                        : st === 'listening'
+                          ? 'listening for chat messages'
+                          : `connected, idle${e.lastWork ? ` · last ${shortTool(e.lastTool)} ${ago(e.lastWork)} ago` : ''}`}
+                      {' · '}
+                      {e.calls} calls
+                    </span>
                   </span>
-                </span>
-              </div>
-            ))
+                  <span className="dim tiny">{st}</span>
+                </div>
+              );
+            })
           ) : (
             <div className="ag-empty">None connected — see Help → Use your own Claude Code, Codex or Cursor.</div>
           )}

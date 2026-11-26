@@ -29,14 +29,8 @@ export interface AgentRun {
   summary?: string;
 }
 
-export interface ExternalAgent {
-  id: string;
-  name: string;
-  since: number;
-  last: number;
-  lastTool?: string;
-  calls: number;
-}
+import type { ExternalAgent } from './agentState';
+export { externalState, countAgents, type ExternalAgent } from './agentState';
 
 export interface AttachedChat {
   sessionId: string;
@@ -477,7 +471,15 @@ export function installChatBridge() {
         break;
       }
       case 'idle':
-        setC({ busy: false, thinking: false, openAssistant: null, busySince: null, statusNote: null });
+        // the agent is done: sub-agents that never reported an end are not running any more
+        setC((st) => ({
+          busy: false,
+          thinking: false,
+          openAssistant: null,
+          busySince: null,
+          statusNote: null,
+          agents: Object.fromEntries(Object.entries(st.agents).map(([k, a]) => [k, a.status === 'running' || a.status === 'pending' ? { ...a, status: 'stopped', ended: Date.now() } : a])),
+        }));
         break;
     }
   });

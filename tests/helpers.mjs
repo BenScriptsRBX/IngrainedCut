@@ -95,7 +95,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * Start the helper engine on its own port with a temporary home and app-data folder, open the editor in a headless
  * browser, and connect an MCP client through mcp/server.mjs (which reads the temporary home's bridge.json).
  */
-export async function startStack({ port = 5397 + Math.floor(Math.random() * 300), settings = {} } = {}) {
+export async function startStack({ port = 5397 + Math.floor(Math.random() * 300), settings = {}, windowSize = '1600,1000', debugPort = null } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'icut-test-'));
   const home = path.join(tmp, 'home');
   const data = path.join(tmp, 'data');
@@ -119,7 +119,7 @@ export async function startStack({ port = 5397 + Math.floor(Math.random() * 300)
   const browser = findBrowser();
   const chrome = spawn(
     browser,
-    ['--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--no-first-run', '--no-default-browser-check', '--autoplay-policy=no-user-gesture-required', `--user-data-dir=${path.join(tmp, 'browser')}`, link],
+    ['--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--no-first-run', '--no-default-browser-check', '--autoplay-policy=no-user-gesture-required', `--window-size=${windowSize}`, ...(debugPort ? [`--remote-debugging-port=${debugPort}`] : []), `--user-data-dir=${path.join(tmp, 'browser')}`, link],
     { stdio: 'ignore', windowsHide: true },
   );
   procs.push(chrome);

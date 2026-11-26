@@ -16,7 +16,8 @@ function clientOf(req) {
   }
 }
 
-/** @param onClient called with ({id,name}, toolName?) whenever an external session pings or calls a tool */
+/** @param onClient called with ({id,name}, toolName?, phase?) when an external session pings (no tool), and when one
+ * of its tool calls starts (phase 'start') and ends (phase 'end') */
 export function startBridge(dispatch, onClient) {
   const token = crypto.randomBytes(24).toString('hex');
   const server = http.createServer(async (req, res) => {
@@ -36,8 +37,12 @@ export function startBridge(dispatch, onClient) {
       req.on('end', async () => {
         try {
           const { name, args } = JSON.parse(body || '{}');
-          onClient?.(client, name);
-          send(200, await dispatch(name, args || {}, client));
+          onClient?.(client, name, 'start');
+          try {
+            send(200, await dispatch(name, args || {}, client));
+          } finally {
+            onClient?.(client, name, 'end');
+          }
         } catch (e) {
           send(200, { content: [{ type: 'text', text: 'Error: ' + (e?.message || e) }], isError: true });
         }

@@ -22,6 +22,7 @@ import * as chatgpt from './chatgptAuth.mjs';
 import { ChatGptAgent } from './chatgptAgent.mjs';
 import { createDocTools, findStyle } from './docTools.mjs';
 import { ensureSkillsInstalled, listSkills, getSkill } from './skills.mjs';
+import { createExternals } from './externals.mjs';
 
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -202,26 +203,10 @@ export function createCore(host) {
     return res;
   }
 
-  // ---------- external Claude Code sessions (via mcp/server.mjs) ----------
-  const externals = new Map();
-  function noteExternal(client, toolName) {
-    // the chat's own Codex / Cursor agent is shown as the main agent, not as an outside session
-    if (!client || String(client.id).startsWith('inapp-')) return;
-    const now = Date.now();
-    const e = externals.get(client.id) ?? { id: client.id, name: client.name || 'Claude Code', since: now, calls: 0 };
-    e.last = now;
-    if (toolName) {
-      e.lastTool = toolName;
-      e.calls++;
-    }
-    externals.set(client.id, e);
-    emitExternals();
-  }
-  function emitExternals() {
-    const now = Date.now();
-    for (const [k, e] of externals) if (now - e.last > 90_000) externals.delete(k);
-    emit('agents:external', [...externals.values()]);
-  }
+  // ---------- outside sessions (Claude Code / Codex / Cursor via mcp/server.mjs), see externals.mjs ----------
+  const externalsTracker = createExternals((list) => emit('agents:external', list));
+  const noteExternal = externalsTracker.note;
+  const emitExternals = externalsTracker.emit;
   const externalsTimer = setInterval(emitExternals, 15_000);
   externalsTimer.unref?.();
 

@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { listSkills, getSkill, installBundledSkills, skillTargets, frontMatter, SKILLS_DIR } from '../electron/skills.mjs';
+import { listSkills, getSkill, installBundledSkills, skillTargets, frontMatter, bundledSkills, SKILLS_DIR } from '../electron/skills.mjs';
+
+const getSkillFiles = (root) => Object.fromEntries(bundledSkills(root).map((s) => [s.folder, s.files]));
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'icut-skills-'));
 
@@ -24,6 +26,16 @@ test('the documentary skill is bundled and listed', () => {
   assert.equal(full.text, fs.readFileSync(path.join(SKILLS_DIR, 'fraggedin-documentary-editor', 'SKILL.md'), 'utf8'));
   assert.match(full.text, /## 3\. Assembling in IngrainedCut/);
   assert.throws(() => getSkill('no-such-skill'), /No bundled skill/);
+});
+
+test('the skills are baked into the program and match skills/ byte for byte', () => {
+  const baked = getSkillFiles();
+  const disk = getSkillFiles(SKILLS_DIR);
+  assert.deepEqual(Object.keys(baked), Object.keys(disk), 'same skills');
+  for (const [folder, files] of Object.entries(disk)) {
+    assert.deepEqual(Object.keys(baked[folder]).sort(), Object.keys(files).sort(), `${folder}: same files`);
+    for (const [f, buf] of Object.entries(files)) assert.ok(buf.equals(baked[folder][f]), `${folder}/${f} is identical (run node scripts/embed-skills.mjs)`);
+  }
 });
 
 test('front matter', () => {

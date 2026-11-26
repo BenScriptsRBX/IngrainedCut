@@ -1,4 +1,5 @@
-// Skills that ship with IngrainedCut (skills/<name>/SKILL.md plus any files next to it). They are installed for the
+// Skills that ship with IngrainedCut (skills/<name>/SKILL.md plus any files next to it), baked into the program by
+// scripts/embed-skills.mjs (electron/skillsBundle.mjs), so every build carries them in its own code. They are installed for the
 // agents IngrainedCut works with, so a Claude Code / Codex / Cursor session picks them up on its own:
 //   ~/.claude/skills/<name>/   Claude Code (the in-app Claude chat loads the user's skills too; Cursor reads it as well)
 //   ~/.agents/skills/<name>/   Codex (and other agents that read the shared .agents folder)
@@ -12,7 +13,9 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { SKILLS } from './skillsBundle.mjs';
 
+/** The skills folder of a source checkout (what skillsBundle.mjs is generated from). */
 export const SKILLS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'skills');
 
 /** Where each agent looks for user skills. */
@@ -63,30 +66,41 @@ export function frontMatter(md) {
   return out;
 }
 
-/** The skills bundled with this build. */
-export function bundledSkills(root = SKILLS_DIR) {
-  if (!fs.existsSync(root)) return [];
-  return fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && fs.existsSync(path.join(root, e.name, 'SKILL.md')))
-    .map((e) => {
-      const dir = path.join(root, e.name);
-      const fm = frontMatter(fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8'));
-      return { name: fm.name || e.name, folder: e.name, description: fm.description || '', dir };
+/** { folder: { relative path: Buffer } } from the baked-in bundle, or (tests) from a skills folder on disk. */
+function sources(root) {
+  if (!root) return Object.fromEntries(Object.entries(SKILLS).map(([folder, files]) => [folder, Object.fromEntries(Object.entries(files).map(([f, b64]) => [f, Buffer.from(b64, 'base64')]))]));
+  if (!fs.existsSync(root)) return {};
+  const out = {};
+  for (const e of fs.readdirSync(root, { withFileTypes: true })) {
+    const dir = path.join(root, e.name);
+    if (!e.isDirectory() || !fs.existsSync(path.join(dir, 'SKILL.md'))) continue;
+    out[e.name] = Object.fromEntries(filesOf(dir).map((f) => [f, fs.readFileSync(path.join(dir, ...f.split('/')))]));
+  }
+  return out;
+}
+
+/** The skills bundled with this build (root: read a skills folder instead, for tests). */
+export function bundledSkills(root) {
+  return Object.entries(sources(root))
+    .filter(([, files]) => files['SKILL.md'])
+    .map(([folder, files]) => {
+      const fm = frontMatter(files['SKILL.md'].toString('utf8'));
+      return { name: fm.name || folder, folder, description: fm.description || '', files };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function listSkills(root = SKILLS_DIR) {
+export function listSkills(root) {
   return bundledSkills(root).map(({ name, description }) => ({ name, description }));
 }
 
-export function getSkill(name, root = SKILLS_DIR) {
+export function getSkill(name, root) {
   const key = String(name ?? '').trim().toLowerCase();
-  const s = bundledSkills(root).find((x) => x.name.toLowerCase() === key || x.folder.toLowerCase() === key);
-  if (!s) throw new Error(`No bundled skill "${name}". Skills: ${bundledSkills(root).map((x) => x.name).join(', ') || 'none'}`);
-  const files = filesOf(s.dir).filter((f) => f !== 'SKILL.md');
-  return { name: s.name, description: s.description, text: fs.readFileSync(path.join(s.dir, 'SKILL.md'), 'utf8'), ...(files.length ? { other_files: files } : {}) };
+  const all = bundledSkills(root);
+  const s = all.find((x) => x.name.toLowerCase() === key || x.folder.toLowerCase() === key);
+  if (!s) throw new Error(`No bundled skill "${name}". Skills: ${all.map((x) => x.name).join(', ') || 'none'}`);
+  const files = Object.keys(s.files).filter((f) => f !== 'SKILL.md').sort();
+  return { name: s.name, description: s.description, text: s.files['SKILL.md'].toString('utf8'), ...(files.length ? { other_files: files } : {}) };
 }
 
 /**
@@ -96,7 +110,7 @@ export function getSkill(name, root = SKILLS_DIR) {
  */
 export function installBundledSkills(o = {}) {
   const home = o.home ?? os.homedir();
-  const root = o.root ?? SKILLS_DIR;
+  const root = o.root;
   const log = o.log ?? ((m) => console.log(m));
   const manifestFile = path.join(home, '.ingrainedcut', 'installed-skills.json');
   let manifest = {};
@@ -106,8 +120,8 @@ export function installBundledSkills(o = {}) {
   const results = [];
   let changed = false;
   for (const s of bundledSkills(root)) {
-    const files = filesOf(s.dir);
-    const bundled = fileHashes(s.dir, files);
+    const files = Object.keys(s.files).sort();
+    const bundled = Object.fromEntries(files.map((f) => [f, sha(s.files[f])]));
     const want = treeHash(bundled);
     for (const t of skillTargets(home)) {
       const dest = path.join(t.dir, s.folder);
@@ -138,7 +152,7 @@ export function installBundledSkills(o = {}) {
       for (const f of files) {
         const to = path.join(dest, ...f.split('/'));
         fs.mkdirSync(path.dirname(to), { recursive: true });
-        fs.copyFileSync(path.join(s.dir, ...f.split('/')), to);
+        fs.writeFileSync(to, s.files[f]);
       }
       const action = Object.keys(have).length ? 'updated' : 'installed';
       results.push({ skill: s.name, agent: t.agent, dir: dest, action, ...(backups.length ? { backups } : {}) });

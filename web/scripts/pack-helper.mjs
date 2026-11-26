@@ -37,6 +37,8 @@ await rolldown.build({
 
 for (const f of ['server/site.json', 'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) fs.cpSync(path.join(root, f), path.join(stage, f));
 fs.cpSync(path.join(root, 'dist'), path.join(stage, 'dist'), { recursive: true });
+// the skills that ship with IngrainedCut (installed for Claude Code / Codex by electron/skills.mjs, served by get_skill)
+fs.cpSync(path.join(root, 'skills'), path.join(stage, 'skills'), { recursive: true });
 
 // the versions the helper downloads later, pinned to the ones this build was tested with
 const icutRuntime = Object.fromEntries(RUNTIME.slice(0, 3).map((n) => [n, readJson(path.join(root, 'node_modules', ...n.split('/'), 'package.json')).version]));

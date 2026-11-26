@@ -24,7 +24,7 @@ All agents edit the same live timeline. Parallelise analysis freely; run edits i
 `;
 
 const ED = (n) => `mcp__${SERVER}__${n}`;
-const READ_TOOLS = ['get_project_state', 'get_timeline', 'capture_frame', 'capture_contact_sheet', 'screenshot_editor', 'detect_silence', 'detect_scenes', 'detect_cuts', 'detect_freezes', 'transcribe', 'analyze_loudness', 'check_edl', 'qa_report'].map(ED);
+const READ_TOOLS = ['get_project_state', 'get_timeline', 'list_skills', 'get_skill', 'capture_frame', 'capture_contact_sheet', 'screenshot_editor', 'detect_silence', 'detect_scenes', 'detect_cuts', 'detect_freezes', 'transcribe', 'analyze_loudness', 'check_edl', 'qa_report'].map(ED);
 const AGENT_BASE = `You are a subagent working inside IngrainedCut, a Premiere-style video editor, on behalf of the main editing assistant. ${SERVER_INSTRUCTIONS}
 You cannot see the user's chat; your task prompt contains the media ids, file paths, clip ids and time ranges you need. If something is missing, call get_project_state. Finish with a concise, precise report (timecodes in seconds) that the main assistant can act on directly.`;
 

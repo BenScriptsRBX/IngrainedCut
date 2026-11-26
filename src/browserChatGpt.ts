@@ -13,7 +13,7 @@ import { hasExtensionYtdlp } from './extensionYtdlp';
 const NS = 'ingrainedcut';
 const MAX_STEPS = 80; // tool rounds in one turn
 const HELPER_ONLY = [
-  'wait_for_prompt', 'send_reply', 'detect_scenes', 'transcribe', 'render_composition',
+  'wait_for_prompt', 'send_reply', 'detect_scenes', 'transcribe', 'render_composition', 'list_skills', 'get_skill',
   // documentary tools that read files on the user's computer or run FFmpeg
   'import_edl', 'import_cues', 'check_edl', 'detect_cuts', 'detect_freezes', 'qa_report', 'export_chapters', 'export_credits', 'make_short', 'snapshot', 'restore',
 ];

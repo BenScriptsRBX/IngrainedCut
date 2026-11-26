@@ -21,7 +21,7 @@ sh('npx vite build');
 console.log('staging', STAGE);
 fs.rmSync(STAGE, { recursive: true, force: true });
 fs.mkdirSync(STAGE, { recursive: true });
-for (const dir of ['dist', 'electron', 'server', 'mcp', 'build']) fs.cpSync(path.join(ROOT, dir), path.join(STAGE, dir), { recursive: true });
+for (const dir of ['dist', 'electron', 'server', 'mcp', 'build', 'skills']) fs.cpSync(path.join(ROOT, dir), path.join(STAGE, dir), { recursive: true });
 for (const f of ['package-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md']) fs.copyFileSync(path.join(ROOT, f), path.join(STAGE, f));
 // the AI SDKs that are large or not ours to redistribute stay out: Claude isn't offered by this helper, and Codex
 // installs itself from npm the first time someone picks it

@@ -21,6 +21,7 @@ import { keyFor, hasContent, writeSnapshot, listAutosaves, summarize, isAutosave
 import * as chatgpt from './chatgptAuth.mjs';
 import { ChatGptAgent } from './chatgptAgent.mjs';
 import { createDocTools, findStyle } from './docTools.mjs';
+import { ensureSkillsInstalled, listSkills, getSkill } from './skills.mjs';
 
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -93,13 +94,21 @@ export function createCore(host) {
 
   const doc = createDocTools({ callRenderer, emit });
 
+  // the skills that ship with IngrainedCut (skills/), for Claude Code / Codex / Cursor: on start and before each chat turn
+  ensureSkillsInstalled();
+
   async function runMainTool(name, args) {
     const docResult = await doc.run(name, args);
     if (docResult) return docResult;
     // the timeline mix is measured in the editor; a media item here with FFmpeg
-    if (name === 'analyze_loudness' && !args.media_id) return callRenderer('analyze_loudness', args);
-    if (name === 'detect_silence' && !args.media_id && !args.clip_id) return callRenderer('detect_silence', args);
+    if (name === 'analyze_loudness' && (args.sequence || !args.media_id)) return callRenderer('analyze_loudness', args);
+    if (name === 'detect_silence' && (args.sequence || (!args.media_id && !args.clip_id))) return callRenderer('detect_silence', args);
     if (name === 'transcribe' && args.track) return text(await doc.transcribeTrack(args));
+    if (name === 'list_skills') return text({ skills: listSkills() });
+    if (name === 'get_skill') {
+      const sk = getSkill(args.name);
+      return { content: [{ type: 'text', text: sk.text }, { type: 'text', text: JSON.stringify({ name: sk.name, description: sk.description, ...(sk.other_files ? { other_files: sk.other_files } : {}) }) }] };
+    }
     switch (name) {
       case 'screenshot_editor': {
         const data = host.screenshot ? await host.screenshot() : null;
@@ -183,7 +192,7 @@ export function createCore(host) {
     const id = `relay-${++relayCalls}`;
     if (relayed) agents.relay.toolUse(id, name, args);
     // text cards inside a batch use the channel style too
-    if (name === 'batch' && args.operations?.some?.((o) => o?.tool === 'add_text_card')) {
+    if (name === 'batch' && args.operations?.some?.((o) => o?.tool === 'add_text_card' || o?.tool === 'add_card')) {
       const dir = mirror?.path && path.isAbsolute(mirror.path) ? path.dirname(mirror.path) : null;
       args = { ...args, _style: findStyle(undefined, dir).text };
     }
@@ -455,6 +464,7 @@ export function createCore(host) {
       saveSettings({ provider: 'relay' });
       emit('agent:event', { type: 'provider', provider: 'relay' });
     }
+    ensureSkillsInstalled();
     return active().send(payload);
   });
   handle('agent:interrupt', () => active().interrupt());

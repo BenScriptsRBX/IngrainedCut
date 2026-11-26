@@ -2,11 +2,12 @@
 // tools.mjs so the general editing tools stay readable.
 
 export const DOC_INSTRUCTIONS = `
-Documentary editing: project_template("doc") sets the tracks (V1 Footage · V2 Overlays · V3 Text; A1 Narration · A2 Clip audio · A3 Music · A4 SFX / Ambience) and every tool also finds tracks by those names. Build from the plan files with import_edl (04_edl.csv) and import_cues (05_cues.csv), compare with check_edl, list with get_timeline. Polish with set_motion, j_cut / l_cut, add_text_card, add_panel; audio with duck, breath, mute_music_under, fade, beat_grid / snap_to_beat, ambience_fill, normalize. Check your cut with qa_report (it runs analyze_loudness, detect_silence, detect_cuts, detect_freezes and transcribe against the targets) and capture_contact_sheet; deliver with export_video presets, export_chapters, export_credits, make_short. snapshot before big changes, restore to go back. Every write tool takes dry_run.`;
+Documentary editing: project_template("doc") sets the tracks (V1 Footage · V2 Panels · V3 Adjustments · V4 Cards; A1 Clip audio · A2 Overlay audio · A3 Narration · A4 Music · A5 SFX / Ambience) and every tool also finds tracks by those names. Build from the plan files with import_edl (04_edl.csv) and import_cues (05_cues.csv), compare with check_edl, list with get_timeline. Polish with set_motion, jl_cut (or j_cut / l_cut), link_clips / unlink_clips, add_card (or add_text_card), add_panel; audio with duck_audio (or duck), breath, mute_music_under, fade, beat_grid / snap_to_beat, ambience_fill, normalize. Measure the program with analyze_loudness / detect_silence / detect_scenes and sequence: true; check the cut with qa_report (loudness, silences, cuts, frozen frames and narration pace against the targets) and capture_contact_sheet; deliver with export_video (presets, loudness_target), export_chapters, export_credits, make_short. snapshot before big changes, restore to go back. Every write tool takes dry_run.`;
 
 /** @param {{ z: typeof import('zod').z, n: () => any, track: () => any, time: (w?: string) => any, TRANSITIONS: string[] }} h */
 export function docTools({ z, track }) {
   const presets = ['chapter_card', 'date_card', 'quote_card', 'name_super', 'list_card'];
+  const ids = () => z.array(z.string());
   return [
     // ---------- P1: build the timeline ----------
     {
@@ -20,7 +21,7 @@ export function docTools({ z, track }) {
       name: 'import_edl',
       where: 'main',
       description:
-        'Build the timeline from an EDL CSV (04_edl.csv). Columns (case-insensitive): id, timeline_in, timeline_out, visual_type, source, source_in, source_out, on_screen_text, motion, transition_in, clip_audio_db, music_cue, sfx, credit, deliberate_hold. Times: seconds, m:ss, h:mm:ss or h:mm:ss:ff. visual_type: footage / raw / recreation / image → V1 Footage; panel / screenshot / document → floating panel on Overlays; chapter_card, date_card, quote_card, name_super, list_card → text card (blurred footage behind); black → nothing. source: a bin item, or a file (relative to the CSV), imported if needed. on_screen_text: "main | subtitle", or "preset: main | subtitle" over footage (default name_super). motion: push_in 3%, pull_out, pan left|right, slow_scroll. transition_in: cut, dissolve 0.5, dip_to_black 1. clip_audio_db: a number puts the clip sound on A2 Clip audio at that gain; empty or "mute" leaves it off. sfx: a file (optionally file.wav@-6) placed on SFX. credit and deliberate_hold are kept for export_credits / qa_report. Re-importing replaces the clips of the same row ids. Returns the clips made per row and the rows it skipped and why.',
+        'Build the timeline from the EDL CSV (04_edl.csv) in the documentary layout. Columns (the skill\'s Reference H): id, timeline_in, timeline_out, section, narration_line, visual_type, source_file_or_url, source_in, source_out, on_screen_text, motion, transition_in, clip_audio_db, music_cue, sfx, credit, deliberate_hold, notes (older names such as source still work). Times: seconds, m:ss, h:mm:ss or h:mm:ss:ff. visual_type: original_clip, interview, recreation, era_broll, gameplay → V1 Footage (its sound on A1); photo, illustration → V1 still with its motion; artifact → V2 panel (screenshot / document / screen recording); card → a text card on V4 over a blurred, darkened V3 adjustment layer (over the row\'s source if it has one, else black). source_file_or_url: a file relative to the CSV (imported if needed) or a bin item; URLs are reported (download them first). on_screen_text: "main | subtitle", optionally "chapter: …" / "date: …" / "quote: …" / "name: …" / "list: …"; on a card row the kind is guessed (quote marks → quote, a year or date → date, ; separated → list, else chapter — a chapter card adds a chapter marker); on other rows it is a lower-third super. motion: none, push_in_3pct, slow_scroll, pan. transition_in: cut, dissolve_0.5s, dip_to_black_0.5s, j_cut (this shot\'s sound starts 10 frames early), l_cut (the previous shot\'s sound runs 10 frames into this one). clip_audio_db: a number puts the clip sound on A1 at that gain; empty or "mute" leaves it off. sfx: a file (optionally file.wav@-6) on A5. deliberate_hold marks the row as a hold for qa_report; credit feeds export_credits. Re-importing replaces the clips of the same row ids. Returns the clips made per row and every row it could not place, with the reason.',
       shape: {
         path: z.string().describe('The CSV file'),
         replace: z.boolean().optional().describe('Remove clips from earlier imports of the same row ids first (default true)'),
@@ -32,9 +33,10 @@ export function docTools({ z, track }) {
       name: 'import_cues',
       where: 'main',
       description:
-        'Place the sound plan from a cue CSV (05_cues.csv). Columns: id, type (music / silence / sfx / ambience / clip_audio), timeline_in, timeline_out, source, source_in, gain_db, fade_in, fade_out, duck (yes = duck under the narration), duck_depth_db, loop, snap (downbeat / phrase / beat: start the music on its next one), credit. music → A3 Music (another Music track when cues overlap), sfx / ambience → A4, clip_audio with a source → A2, clip_audio without one sets the gain of the clip audio in that range, silence → the music fades out and back in around it. Re-importing replaces the same cue ids.',
+        'Place the sound plan from the cue CSV (05_cues.csv). Columns (the skill\'s Reference H): cue_id, timeline_in, timeline_out, type, track_title, source_and_licence, function, level_vs_narration_db, entry, exit, notes. type: music → A4 Music (another Music track when cues overlap), sfx / ambience → A5, clip_audio → sets the level of the clip sound (A1) in that range and takes the music out under it, silence → music and SFX fade to near-silence there. The file: track_title or source_and_licence when it names a file (relative to the CSV), else the media file in the CSV\'s folder (or below it) whose name matches track_title. level_vs_narration_db: the cue\'s loudness relative to the narration on A3, measured (−15 = 15 dB under the voice; clip_audio 0 = as loud as the narration). entry / exit: hard_on_downbeat (starts on the music\'s next downbeat), fade_0.5s / fade_1s / fade_2s, cut_on_phrase (ends on a phrase boundary), j_cut / l_cut (clip_audio). source_and_licence is kept as the credit. Re-importing replaces the same cue ids. Reports every row it could not place, and why.',
       shape: {
         path: z.string().describe('The CSV file'),
+        duck: z.boolean().optional().describe('Music cues duck under the narration: the bed sits level_vs_narration_db under the voice while it speaks and rises to the narration level in the gaps (duck_audio with depth = -level). Default false: a steady bed'),
         replace: z.boolean().optional().describe('default true'),
         template: z.boolean().optional().describe('default true'),
       },
@@ -48,7 +50,7 @@ export function docTools({ z, track }) {
     {
       name: 'project_template',
       where: 'renderer',
-      description: 'Set up the documentary track layout: V1 Footage, V2 Overlays/panels, V3 Text; A1 Narration, A2 Clip audio, A3 Music, A4 SFX / Ambience (names tracks, adds missing ones, keeps clips).',
+      description: 'Set up the documentary track layout: V1 Footage, V2 Panels, V3 Adjustments (blur / darken behind cards), V4 Cards; A1 Clip audio (the footage\'s own sound), A2 Overlay audio, A3 Narration, A4 Music, A5 SFX / Ambience (names tracks, adds missing ones, keeps clips). A project already set up with the 0.2.33 layout (A1 Narration) keeps it.',
       shape: { template: z.enum(['doc']).optional() },
     },
     {
@@ -75,6 +77,43 @@ export function docTools({ z, track }) {
       where: 'renderer',
       description: "L-cut: the clip's linked sound carries on `frames` after its picture ends (under the next shot). 0 lines them up again.",
       shape: { clip_id: z.string(), frames: z.number().optional().describe('default 10') },
+    },
+    {
+      name: 'jl_cut',
+      where: 'renderer',
+      description:
+        "J- or L-cut a clip's linked sound without unlinking it: audio_lead = seconds the sound starts before its picture (J), audio_tail = seconds it runs past the picture's end (L). Values snap to whole frames; 0 lines that edge up again; leave one out to keep that edge. Sound it overlaps on its track is trimmed back. Returns the offsets in seconds and frames.",
+      shape: {
+        clip_id: z.string().describe('The video clip (or its linked audio)'),
+        audio_lead: z.number().optional().describe('Seconds, e.g. 0.33 (Reference F: 6–15 frames)'),
+        audio_tail: z.number().optional().describe('Seconds'),
+      },
+    },
+    {
+      name: 'link_clips',
+      where: 'renderer',
+      description: 'Link clips (e.g. a picture and its separately placed sound) so they move, trim and split together.',
+      shape: { clip_ids: ids().describe('Two or more clips') },
+    },
+    {
+      name: 'unlink_clips',
+      where: 'renderer',
+      description: 'Unlink clips from their linked partners so they move and trim on their own.',
+      shape: { clip_ids: ids() },
+    },
+    {
+      name: 'add_card',
+      where: 'main',
+      description:
+        'A text card in one undo step: the text (with fades) on the Cards track, over a blurred and darkened adjustment layer (backdrop blur) or a black matte (black) underneath it, or no backdrop (none). kind: chapter (adds a chapter marker), date, quote, name (a lower third, default backdrop none), list (items separated by ; or new lines). text "main | subtitle" adds the small line (chapter number, the date\'s place, the quote\'s attribution, the name\'s role, the list\'s heading). Style from style_path (JSON or Markdown: font, text colour, accent, card blur, card darken), else FraggedIn/style.md near the project, else the add_text defaults.',
+      shape: {
+        kind: z.enum(['chapter', 'date', 'quote', 'name', 'list']),
+        text: z.string(),
+        start: z.number().describe('Timeline start (s)'),
+        duration: z.number().optional().describe('Seconds, default 4 (name 3)'),
+        backdrop: z.enum(['blur', 'black', 'none']).optional().describe('default blur (name: none)'),
+        style_path: z.string().optional().describe('A .json or .md style file'),
+      },
     },
     {
       name: 'add_text_card',
@@ -108,13 +147,28 @@ export function docTools({ z, track }) {
     },
     // ---------- P2: audio ----------
     {
+      name: 'duck_audio',
+      where: 'renderer',
+      description:
+        'Sidechain-style ducking written as volume keyframes (so it stays editable): wherever the key tracks have sound above threshold_db (read from their waveform), the target clips go down by depth_db, ramping over attack before and release after, held for hold after the sound stops; gaps shorter than attack + release + hold stay down so the bed does not pump. Re-running replaces the earlier ducking on those clips. Returns the keyframes written per clip.',
+      shape: {
+        target_tracks: z.array(track()).optional().describe('Tracks to duck, default ["A4"] (Music)'),
+        key_tracks: z.array(track()).optional().describe('Tracks that trigger it, default ["A3"] (Narration)'),
+        depth_db: z.number().optional().describe('default 15'),
+        threshold_db: z.number().optional().describe('default -40'),
+        attack: z.number().optional().describe('Seconds, default 0.15'),
+        release: z.number().optional().describe('Seconds, default 0.6'),
+        hold: z.number().optional().describe('Seconds, default 0.2'),
+      },
+    },
+    {
       name: 'duck',
       where: 'renderer',
       description:
         'Duck the music under the narration: volume keyframes on the music clips go down by depth_db wherever the key track has speech (found from its waveform), attack before and release after, short gaps bridged so it does not pump. Re-running replaces the earlier ducking; remove: true takes it off. Envelopes from duck / breath / mute_music_under add up with the clip\'s own volume keyframes.',
       shape: {
-        music_track: track().optional().describe('default the Music track (A3)'),
-        key_track: track().optional().describe('default the Narration track (A1)'),
+        music_track: track().optional().describe('default the Music track (A4)'),
+        key_track: track().optional().describe('default the Narration track (A3)'),
         clip_ids: z.array(z.string()).optional().describe('Only these music clips'),
         depth_db: z.number().optional().describe('default 15'),
         attack_ms: z.number().optional().describe('default 150'),
@@ -246,8 +300,22 @@ export function docTools({ z, track }) {
       name: 'qa_report',
       where: 'main',
       description:
-        'Run the checks on the whole cut and compare them with the documentary targets: hook by 0:30, climax at 45–70% of the runtime (markers named Hook / Climax), silences only under chapter cards and around raw clips, no unmarked hold over 20 s, no frozen frames, -14 LUFS / -1 dBTP, words per minute, and with script_path the narration against the script; with edl_path also check_edl. Returns pass / fail per check and the issues with their times.',
+        'Measure the whole cut (sequence loudness, silences, scenes and holds, frozen or still frames, narration words per minute from transcribing A3 Narration) and compare it with the skill\'s Reference I targets: hook by 0:30 and climax at 45–70% of the runtime (markers named Hook / Climax, or of those kinds), −14 ±1 LUFS with true peak ≤ −1 dBTP, no unmarked hold over 20 s, silences only near chapter markers / chapter cards or marked holds; with script_path the narration against the script, with edl_path also check_edl. targets overrides any of them. Returns pass / fail per check and the issues with their timestamps.',
       shape: {
+        targets: z
+          .object({
+            hook_by_s: z.number(),
+            climax_range: z.array(z.number()).describe('[from, to] fraction of runtime'),
+            lufs: z.number(),
+            lufs_tolerance: z.number(),
+            true_peak: z.number(),
+            max_hold_s: z.number(),
+            silence_near_s: z.number().describe('How close to a chapter marker / hold a silence may be, default 3'),
+            wpm: z.array(z.number()).describe('[min, max] narration words per minute, default [130, 190]'),
+            still_s: z.number().describe('Still / frozen picture longer than this is flagged, default 10'),
+          })
+          .partial()
+          .optional(),
         script_path: z.string().optional(),
         edl_path: z.string().optional(),
         target_lufs: z.number().optional().describe('default -14'),

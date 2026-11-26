@@ -19,9 +19,10 @@ import { syncClips } from './sync';
 import { findSilences } from './cutTools';
 import { autoColor } from './colorActions';
 import {
-  addPanel, addTextCard, ambienceFill, applyCues, applyEdl, applyMotion, applyTemplate, breath, buildShort, checkEdl, clipGrid, cueRows, dirOf, duck,
-  edlRows, fadeClips, fakeMedia, findMedia, missingFiles, muteMusicUnder, nextGridPoint, parseCsv, parseStyle, shortFile, splitEdit, timelineListing,
-  timelineLoudness, timelineSilences, transitionType, type DocStyle,
+  addPanel, addTextCard, ambienceFill, applyCues, applyEdl, applyMotion, applyTemplate, breath, buildShort, checkEdl, clipGrid, cueFile, cueRows, dirOf, duck,
+  duckAudio, edlRows, fadeClips, fakeMedia, findMedia, jlCut, linkClips, missingFiles, muteMusicUnder, narrationClips, nextGridPoint, parseCsv, parseStyle,
+  resolveCue, roleTrack, shortFile, soloLoudness, splitEdit, timelineListing, timelineLoudness, timelineSilences, transitionType, unlinkClips, CARD_KINDS,
+  DEFAULT_STYLE, type DocStyle,
 } from './docTools';
 
 // ---------------- describing state ----------------
@@ -579,6 +580,22 @@ const MUT: Record<string, { label: (a: any) => string; run: Mut }> = {
       return { clips: out };
     },
   },
+  jl_cut: { label: (a) => (a.audio_lead && a.audio_tail ? 'Claude: J/L-Cut' : a.audio_tail ? 'Claude: L-Cut' : 'Claude: J-Cut'), run: (d, a) => jlCut(d, a.clip_id, a.audio_lead, a.audio_tail) },
+  link_clips: { label: () => 'Claude: Link', run: (d, a) => linkClips(d, a.clip_ids ?? []) },
+  unlink_clips: { label: () => 'Claude: Unlink', run: (d, a) => unlinkClips(d, a.clip_ids ?? []) },
+  add_card: {
+    label: (a) => `Claude: ${a.kind ?? 'Text'} Card`,
+    run: (d, a) => {
+      const preset = CARD_KINDS[String(a.kind ?? '').toLowerCase()];
+      if (!preset) throw new Error('kind: chapter, date, quote, name or list');
+      const [main, ...sub] = String(a.text ?? '').split(/\s*\|\s*/);
+      if (!main.trim()) throw new Error('Pass the card text');
+      // the style file the main process found (_style: style_path or FraggedIn/style.md), else the add_text defaults
+      const style = docStyle(a);
+      const dur = a.duration ?? (preset === 'name_super' ? 3 : 4);
+      return addTextCard(d, { preset, text: main.replace(/\\n/g, '\n'), subtitle: sub.join(' | ') || undefined, at: a.start ?? S().playhead, dur, style, backdrop: a.backdrop });
+    },
+  },
   j_cut: { label: () => 'Claude: J-Cut', run: (d, a) => ({ audio: splitEdit(d, a.clip_id, a.frames ?? 10, 'j') }) },
   l_cut: { label: () => 'Claude: L-Cut', run: (d, a) => ({ audio: splitEdit(d, a.clip_id, a.frames ?? 10, 'l') }) },
   add_text_card: {
@@ -594,6 +611,7 @@ const MUT: Record<string, { label: (a: any) => string; run: Mut }> = {
     },
   },
   duck: { label: (a) => (a.remove ? 'Claude: Remove Ducking' : 'Claude: Duck Music'), run: (d, a) => duck(d, a) },
+  duck_audio: { label: () => 'Claude: Duck Audio', run: (d, a) => duckAudio(d, a) },
   breath: { label: () => 'Claude: Breath', run: (d, a) => breath(d, a) },
   mute_music_under: { label: () => 'Claude: Mute Music Under', run: (d, a) => muteMusicUnder(d, a) },
   fade: { label: () => 'Claude: Fade', run: (d, a) => fadeClips(d, a) },
@@ -905,22 +923,54 @@ const DOC_ASYNC: Record<string, (a: any) => Promise<CallToolResult>> = {
     const rows = cueRows(parseCsv(a._text), p0.settings.fps);
     if (!rows.length) throw new Error(`${a.path}: no rows (the first line must be the column names)`);
     const baseDir = dirOf(a.path);
-    const missing = await existing(missingFiles(p0, rows.map((r) => r.source), baseDir));
+    const files: string[] = Array.isArray(a._files) ? a._files : [];
+    const missing = await existing(missingFiles(p0, rows.map((r) => cueFile(r, files) ?? '').filter(Boolean), baseDir));
     if (missing.length && !a.dry_run) await importPaths(missing);
-    // narration placed by this sheet: its waveform is computed in the background, and ducking needs it
-    if (!a.dry_run && rows.some((r) => r.duck)) {
-      const narr = rows.filter((r) => r.type === 'narration').map((r) => findMedia(S().project, r.source, baseDir)).filter(Boolean) as MediaItem[];
-      const t0 = Date.now();
-      while (narr.some((m) => !S().project.media.find((x) => x.id === m.id)?.peaks?.length) && Date.now() - t0 < 60_000) await new Promise((r) => setTimeout(r, 300));
+    const opts = { baseDir, files, replace: a.replace, template: a.template, duck: !!a.duck };
+    // ducking reads the narration's waveform, which is computed in the background after import
+    if (!a.dry_run && (a.duck || rows.some((r) => r.duck))) await waitForWaveforms('Narration', 60_000);
+    // level_vs_narration_db: measure the narration as placed and each cue's sound at 0 dB
+    const rel: Record<string, number> = {};
+    const levelNotes: string[] = [];
+    if (!a.dry_run && rows.some((r) => r.level != null)) {
+      const p = S().project;
+      const narr = await soloLoudness(p, narrationClips(p));
+      if (narr == null) levelNotes.push('No narration on A3 to measure against: level_vs_narration_db was used as plain gain. Place the narration first, then import the cues again.');
+      else {
+        const plan = structuredClone(p);
+        const placed = applyCues(plan, rows, opts).placed;
+        for (const r of rows) {
+          if (r.level == null) continue;
+          const row = placed.find((x: any) => x.id === r.id);
+          let clips: Clip[] = [];
+          if (row?.clips?.length && typeof row.clips[0] === 'string') clips = plan.clips.filter((c) => row.clips.includes(c.id));
+          else if (r.type === 'clip_audio' && r.tin != null) {
+            const t = roleTrack(plan, 'clip_audio');
+            clips = plan.clips.filter((c) => c.trackId === t.id && c.kind === 'audio' && c.start < (r.tout ?? Infinity) && clipEnd(c) > r.tin!);
+          }
+          const own = await soloLoudness(plan, clips, { zero: true, a: r.tin, b: r.tout });
+          if (own != null) rel[r.id] = Math.round((narr - own) * 10) / 10;
+          else levelNotes.push(`${r.id}: could not measure its loudness (silent?), level used as plain gain`);
+        }
+        levelNotes.push(`Narration measured at ${Math.round(narr * 10) / 10} LUFS`);
+      }
     }
     let toSnap: { clip: string; grid: string }[] = [];
+    let toPhrase: { clip: string; end: number }[] = [];
     const out: any = runMutation(
       `Claude: Import Cues (${rows.length} rows)`,
       (d) => {
-        const r = applyCues(d, rows, { baseDir, replace: a.replace, template: a.template });
+        const r = applyCues(d, rows, { ...opts, rel });
         toSnap = r.to_snap;
-        const { to_snap, ...rest } = r;
-        return { ...(a.dry_run && missing.length ? { would_import: missing } : {}), ...rest, ...(to_snap.length ? { snapped_to_grid: to_snap } : {}) };
+        toPhrase = r.to_phrase;
+        const { to_snap, to_phrase, ...rest } = r;
+        return {
+          ...(a.dry_run && missing.length ? { would_import: missing } : {}),
+          ...rest,
+          ...(levelNotes.length ? { levels: levelNotes } : {}),
+          ...(a.dry_run && rows.some((x) => x.level != null) ? { levels: ['Dry run: level_vs_narration_db is measured against the narration when the import runs'] } : {}),
+          ...(to_snap.length ? { snapped_to_grid: to_snap } : {}),
+        };
       },
       !!a.dry_run,
       a.dry_run && missing.length ? (d) => fakeMedia(d, missing) : undefined,
@@ -954,6 +1004,36 @@ const DOC_ASYNC: Record<string, (a: any) => Promise<CallToolResult>> = {
         });
       out.snapped = slips.map((x) => ({ clip: x.clip, source_in: r3(x.in) }));
       if (notes.length) out.snap_notes = notes;
+    }
+    // exit cut_on_phrase: end the cue on the music's last phrase boundary (else downbeat) before timeline_out
+    if (!a.dry_run && toPhrase.length) {
+      const cuts: { clip: string; end: number }[] = [];
+      const notes: string[] = [];
+      for (const t of toPhrase) {
+        try {
+          const p = S().project;
+          const c = getClip(p, t.clip);
+          const g = await clipGrid(p, c);
+          const end = clipEnd(c);
+          const pickIn = (list: number[]) => [...list].reverse().find((x) => x <= end + 0.25 && x >= end - 4 && x > c.start + 0.5);
+          const at = pickIn(g.phrases) ?? pickIn(g.downbeats);
+          if (at != null) cuts.push({ clip: c.id, end: at });
+          else notes.push(`${c.id}: no phrase or downbeat in the last 4 s`);
+        } catch (e: any) {
+          notes.push(`${t.clip}: ${e.message}`);
+        }
+      }
+      if (cuts.length)
+        runMutation('Claude: Cues on the Phrase', (d) => {
+          for (const x of cuts) {
+            const c = getClip(d, x.clip);
+            trimEnd(d, c, x.end);
+            c.fadeOut = Math.min(0.05, c.duration);
+          }
+          return {};
+        });
+      out.cut_on_phrase = cuts.map((x) => ({ clip: x.clip, ends_at: r3(x.end) }));
+      if (notes.length) out.phrase_notes = notes;
     }
     return txt(out);
   },
@@ -1064,6 +1144,7 @@ export async function runTool(name: string, a: any): Promise<CallToolResult> {
   const s = S();
   if (DOC_ASYNC[name]) return DOC_ASYNC[name](a);
   if (name === 'duck' && !a.remove) await waitForWaveforms(a.key_track, 30_000);
+  if (name === 'duck_audio') for (const t of a.key_tracks?.length ? a.key_tracks : ['Narration']) await waitForWaveforms(t, 30_000);
   if (MUT[name]) {
     // a file path where a bin item is expected: import it first (a dry run uses a stand-in instead)
     const key = name === 'add_clip' ? 'path' : name === 'add_panel' || name === 'ambience_fill' ? 'src' : null;
@@ -1130,10 +1211,10 @@ export async function runTool(name: string, a: any): Promise<CallToolResult> {
     }
     case 'analyze_loudness':
       // the timeline mix (a media item is measured by the engine with FFmpeg)
-      if (a.media_id) throw new Error('Measuring a single file needs the IngrainedCut helper. Without media_id this measures the timeline mix.');
+      if (a.media_id && !a.sequence) throw new Error('Measuring a single file needs the IngrainedCut helper. Without media_id (or with sequence: true) this measures the timeline mix.');
       return txt({ ...(await timelineLoudness(s.project, a)), ...(s.project.settings.loudness ? { export_normalizes_to: s.project.settings.loudness } : {}) });
     case 'detect_silence':
-      if (a.media_id || a.clip_id) throw new Error('Silence in a single file needs the IngrainedCut helper. Without media_id / clip_id this looks at the timeline mix.');
+      if ((a.media_id || a.clip_id) && !a.sequence) throw new Error('Silence in a single file needs the IngrainedCut helper. Without media_id / clip_id (or with sequence: true) this looks at the timeline mix.');
       return txt(await timelineSilences(s.project, a));
     case 'screenshot_editor': {
       // web version: the browser tab renders itself (the desktop app captures its window natively)
@@ -1205,7 +1286,7 @@ export async function runTool(name: string, a: any): Promise<CallToolResult> {
         format: a.format,
         quality: a.quality,
         range: a.range,
-        loudness: a.normalize === false ? null : a.target_lufs != null ? { lufs: a.target_lufs, truePeak: a.true_peak ?? -1 } : undefined,
+        loudness: a.normalize === false ? null : (a.loudness_target ?? a.target_lufs) != null ? { lufs: a.loudness_target ?? a.target_lufs, truePeak: a.true_peak ?? -1 } : undefined,
         scale: a.height ? a.height / seq.height : a.scale,
         fps: a.fps,
         bitrate: a.bitrate_mbps ? a.bitrate_mbps * 1e6 : undefined,

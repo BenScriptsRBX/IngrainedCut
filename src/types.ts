@@ -196,6 +196,9 @@ export interface ClipMeta {
   credit?: string;
   /** a long hold the edit means to have (not flagged by qa_report) */
   hold?: boolean;
+  /** the EDL row's visual_type (original_clip, artifact, photo, card…) and section */
+  visual?: string;
+  section?: string;
   /** footage, raw, recreation, panel, card, card_bg, music, sfx, ambience, narration, clip_audio… */
   role?: string;
   /** text card preset (add_text_card) */

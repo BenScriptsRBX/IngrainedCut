@@ -1,122 +1,29 @@
 // Documentary-editing tools (renderer side): build a timeline from an EDL / cue sheet, the doc track layout, slow
 // motion moves, J/L cuts, text card presets, floating panels, ducking and "breaths", beat grids, and the timeline
 // loudness / silence analysis the QA report uses. The main process reads the files (electron/docTools.mjs) and
-// passes their text in as `_text` / `_style`.
+// passes their text in as `_text` / `_style`. Reading the plan files themselves is in docPlan.ts.
 import type { Clip, Keyframe, MediaItem, Project, TextStyle, Track, TransitionType } from './types';
 import {
   DEFAULT_TEXT, DEFAULT_TRANSFORM, DEFAULT_FX, assertUnlocked, clearRegion, clipEnd, ensureTrack, evalKey, findTrack, getClip, getTrack, linkedGroup,
-  makeClip, mediaOf, nid, placeMedia, prevAdjacent, rippleDeleteRange, sequenceDuration, trackLabel, tracksOf, trimEnd, trimStart,
+  makeClip, mediaOf, nid, placeMedia, rippleDeleteRange, sequenceDuration, trackLabel, tracksOf, trimEnd, trimStart,
 } from './ops';
 import { measureText } from './compositor';
 import { renderMix } from './exporter';
 import { measureTimeline, type LoudnessMeter } from './loudness';
 import { beatGrid } from './beats';
 import { stripForFile } from './store';
+import {
+  AUDIO_EXT, CARD_KINDS, CARD_PRESETS, IMAGE_EXT, MEDIA_EXT, VISUAL, cardOf, cardText, inferCard, isAbs, isUrl, joinPath, matchTitle, num, parseMotion, parseStyle,
+  parseTransition, type CardPreset, type CueRow, type DocStyle, type EdlRow, type Motion,
+} from './docPlan';
+
+export * from './docPlan';
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
 const EPS = 1e-6;
 
-// ---------------- CSV, times ----------------
-
-export type Row = Record<string, string> & { _line: string };
-
-export function parseCsv(text: string): Row[] {
-  text = text.replace(/^﻿/, '');
-  const first = text.split(/\r?\n/, 1)[0] ?? '';
-  const sep = (first.match(/\t/g)?.length ?? 0) > (first.match(/,/g)?.length ?? 0) ? '\t' : (first.match(/;/g)?.length ?? 0) > (first.match(/,/g)?.length ?? 0) ? ';' : ',';
-  const rows: { line: number; cells: string[] }[] = [];
-  let row: string[] = [];
-  let cell = '';
-  let q = false;
-  let line = 1;
-  let rowLine = 1;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (q) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          cell += '"';
-          i++;
-        } else q = false;
-      } else {
-        if (ch === '\n') line++;
-        cell += ch;
-      }
-    } else if (ch === '"' && cell.trim() === '') {
-      q = true;
-      cell = '';
-    } else if (ch === sep) {
-      row.push(cell);
-      cell = '';
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && text[i + 1] === '\n') i++;
-      row.push(cell);
-      rows.push({ line: rowLine, cells: row });
-      row = [];
-      cell = '';
-      line++;
-      rowLine = line;
-    } else cell += ch;
-  }
-  if (cell !== '' || row.length) {
-    row.push(cell);
-    rows.push({ line: rowLine, cells: row });
-  }
-  const useful = rows.filter((r) => r.cells.some((c) => c.trim()) && !r.cells[0].trim().startsWith('#'));
-  if (!useful.length) return [];
-  const header = useful[0].cells.map((h) => h.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''));
-  return useful.slice(1).map((r) => {
-    const o = { _line: String(r.line) } as Row;
-    header.forEach((h, i) => (o[h] = (r.cells[i] ?? '').trim()));
-    return o;
-  });
-}
-
-/** seconds from "12.5", "1:02.5" (m:ss), "1:02:03.5" (h:mm:ss) or "01:02:03:12" (h:mm:ss:ff) */
-export function parseTime(v: string | number | undefined | null, fps: number): number | undefined {
-  if (v == null) return undefined;
-  if (typeof v === 'number') return v;
-  const s = v.trim().replace(/;/g, ':');
-  if (!s) return undefined;
-  if (/^-?\d+(\.\d+)?\s*s?$/i.test(s)) return parseFloat(s);
-  const parts = s.split(':');
-  if (parts.length >= 2 && parts.length <= 4 && parts.every((x) => /^\d+(\.\d+)?$/.test(x))) {
-    const n = parts.map(Number);
-    if (n.length === 4) return n[0] * 3600 + n[1] * 60 + n[2] + n[3] / fps;
-    if (n.length === 3) return n[0] * 3600 + n[1] * 60 + n[2];
-    return n[0] * 60 + n[1];
-  }
-  throw new Error(`"${v}" is not a time (use seconds, m:ss, h:mm:ss or h:mm:ss:ff)`);
-}
-
-const pick = (r: Row, ...keys: string[]) => {
-  for (const k of keys) if (r[k] != null && r[k] !== '') return r[k];
-  return '';
-};
-const truthy = (v: string) => /^(y|yes|true|1|x|✓|hold)$/i.test(v.trim());
-const num = (v: string) => {
-  const m = v.replace(',', '.').match(/^\s*([+-]?\d+(\.\d+)?)/);
-  return m ? parseFloat(m[1]) : undefined;
-};
-
 // ---------------- sources ----------------
 
-const IMAGE_EXT = /\.(png|jpe?g|webp|gif|bmp|tiff?|avif|heic)$/i;
-const MEDIA_EXT = /\.(mp4|mov|mkv|webm|m4v|avi|mts|m2ts|ts|wav|mp3|m4a|aac|flac|ogg|opus|png|jpe?g|webp|gif|bmp|tiff?|avif)$/i;
-const isAbs = (p: string) => /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('/') || p.startsWith('\\\\');
-
-export function joinPath(base: string, rel: string) {
-  if (!rel || isAbs(rel)) return rel;
-  const win = base.includes('\\') || /^[a-zA-Z]:/.test(base);
-  const parts = (base.replace(/[\\/]+$/, '') + '/' + rel).split(/[\\/]+/);
-  const out: string[] = [];
-  for (const p of parts) {
-    if (p === '..') out.pop();
-    else if (p !== '.') out.push(p);
-  }
-  return out.join(win ? '\\' : '/');
-}
-export const dirOf = (p: string) => p.replace(/[\\/][^\\/]*$/, '');
 const norm = (p: string) => p.replace(/\\/g, '/').toLowerCase();
 const base = (p: string) => norm(p).split('/').pop()!;
 
@@ -161,24 +68,35 @@ export function fakeMedia(d: Project, paths: string[]) {
 
 // ---------------- tracks: the documentary layout ----------------
 
+/** The skill's layout (section 3 of fraggedin-documentary-editor): footage V1 with its sound on A1, panels V2, the
+ * blur / darken layers behind cards V3, cards V4; overlay sound A2, narration A3, music A4, SFX and ambience A5. */
 export const DOC_TRACKS = {
-  video: ['Footage', 'Overlays', 'Text'],
-  audio: ['Narration', 'Clip audio', 'Music', 'SFX / Ambience'],
+  video: ['Footage', 'Panels', 'Adjustments', 'Cards'],
+  audio: ['Clip audio', 'Overlay audio', 'Narration', 'Music', 'SFX / Ambience'],
 } as const;
 
 const ROLE_TRACK: Record<string, ['video' | 'audio', number, string]> = {
   footage: ['video', 0, 'Footage'],
-  overlay: ['video', 1, 'Overlays'],
-  text: ['video', 2, 'Text'],
-  narration: ['audio', 0, 'Narration'],
-  clip_audio: ['audio', 1, 'Clip audio'],
-  music: ['audio', 2, 'Music'],
-  sfx: ['audio', 3, 'SFX / Ambience'],
-  ambience: ['audio', 3, 'SFX / Ambience'],
+  overlay: ['video', 1, 'Panels'],
+  adjust: ['video', 2, 'Adjustments'],
+  text: ['video', 3, 'Cards'],
+  clip_audio: ['audio', 0, 'Clip audio'],
+  overlay_audio: ['audio', 1, 'Overlay audio'],
+  narration: ['audio', 2, 'Narration'],
+  music: ['audio', 3, 'Music'],
+  sfx: ['audio', 4, 'SFX / Ambience'],
+  ambience: ['audio', 4, 'SFX / Ambience'],
 };
+/** The 0.2.33 layout, kept by projects that were set up with it. */
+const OLD_ROLE_TRACK: Record<string, string> = { overlay: 'Overlays', text: 'Text', narration: 'Narration', clip_audio: 'Clip audio', music: 'Music', sfx: 'SFX / Ambience', ambience: 'SFX / Ambience' };
+const oldLayout = (d: Project) => tracksOf(d, 'audio')[0]?.name === 'Narration';
 
 export function applyTemplate(d: Project) {
   const out: Record<string, string> = {};
+  if (oldLayout(d)) {
+    for (const t of d.tracks) if (t.name) out[trackLabel(d, t)] = t.name;
+    return out;
+  }
   (['video', 'audio'] as const).forEach((kind) =>
     DOC_TRACKS[kind].forEach((name, i) => {
       const t = ensureTrack(d, kind, i);
@@ -196,7 +114,8 @@ export function roleTrack(d: Project, role: keyof typeof ROLE_TRACK): Track {
     const amb = d.tracks.find((t) => t.kind === 'audio' && /^ambience/i.test(t.name ?? ''));
     if (amb) return amb;
   }
-  return d.tracks.find((t) => t.kind === kind && t.name === name) ?? ensureTrack(d, kind, idx);
+  const old = OLD_ROLE_TRACK[role];
+  return d.tracks.find((t) => t.kind === kind && t.name === name) ?? (old ? d.tracks.find((t) => t.kind === kind && t.name === old) : undefined) ?? ensureTrack(d, kind, idx);
 }
 
 const busy = (d: Project, tid: string, a: number, b: number, exclude?: Set<string>) =>
@@ -223,8 +142,6 @@ function freeAudioLike(d: Project, t: Track, a: number, b: number) {
 }
 
 // ---------------- motion ----------------
-
-export type Motion = 'push_in' | 'pull_out' | 'pan' | 'slow_scroll' | 'none';
 
 export function applyMotion(d: Project, c: Clip, type: Motion, amountPct = 3, ease: 'inOut' | 'linear' = 'inOut', direction?: string) {
   if (c.kind === 'audio') throw new Error(`${c.id} is an audio clip; motion needs a picture`);
@@ -278,39 +195,6 @@ export function applyMotion(d: Project, c: Clip, type: Motion, amountPct = 3, ea
   return { type, keyframes: Object.fromEntries(Object.entries(c.keyframes).filter(([k]) => ['scale', 'x', 'y'].includes(k))) };
 }
 
-function parseMotion(s: string): { type: Motion; amount?: number; direction?: string } | null {
-  const t = s.trim().toLowerCase();
-  if (!t || t === 'none' || t === 'static' || t === '-') return null;
-  const type = (['push_in', 'pull_out', 'pan', 'slow_scroll'] as Motion[]).find((m) => t.replace(/[\s-]+/g, '_').startsWith(m) || t.replace(/[\s-]+/g, '').startsWith(m.replace('_', '')));
-  const alias: Record<string, Motion> = { zoom_in: 'push_in', push: 'push_in', zoom: 'push_in', zoom_out: 'pull_out', pull: 'pull_out', scroll: 'slow_scroll', ken_burns: 'push_in' };
-  const ty = type ?? alias[Object.keys(alias).find((k) => t.replace(/[\s-]+/g, '_').startsWith(k)) ?? ''];
-  if (!ty) throw new Error(`motion "${s}" not understood (push_in, pull_out, pan [left|right|up|down], slow_scroll, none — optionally with a percent)`);
-  const amount = t.match(/(\d+(\.\d+)?)\s*%?/)?.[1];
-  const direction = t.match(/\b(left|right|up|down)\b/)?.[1];
-  return { type: ty, amount: amount ? parseFloat(amount) : undefined, direction };
-}
-
-// ---------------- transitions ----------------
-
-const TRANS_ALIAS: Record<string, TransitionType | 'cut'> = {
-  cut: 'cut', none: 'cut', dissolve: 'cross-dissolve', cross_dissolve: 'cross-dissolve', crossfade: 'cross-dissolve', xfade: 'cross-dissolve', mix: 'cross-dissolve',
-  dip_to_black: 'dip-to-black', fade_black: 'dip-to-black', fadeblack: 'dip-to-black', dip: 'dip-to-black', fade_to_black: 'dip-to-black', dip_to_white: 'dip-to-white',
-  wipe_left: 'wipe-left', wipe_right: 'wipe-right', slide_left: 'slide-left', slide_right: 'slide-right', push_left: 'push-left', zoom_in: 'zoom-in', blur_dissolve: 'blur-dissolve',
-};
-export function transitionType(s: string): TransitionType | 'cut' {
-  const k = s.trim().toLowerCase().replace(/[\s-]+/g, '_');
-  const t = TRANS_ALIAS[k];
-  if (!t) throw new Error(`transition "${s}" not understood (cut, dissolve, dip_to_black, dip_to_white, wipe_left…)`);
-  return t;
-}
-function parseTransition(s: string): { type: TransitionType | 'cut'; duration?: number } | null {
-  const t = s.trim();
-  if (!t) return null;
-  const m = t.match(/^([a-z_\- ]+?)\s*[:@ ]?\s*(\d+(\.\d+)?)?\s*s?$/i);
-  if (!m) throw new Error(`transition "${s}" not understood`);
-  return { type: transitionType(m[1]), duration: m[2] ? parseFloat(m[2]) : undefined };
-}
-
 // ---------------- J / L cuts ----------------
 
 export function splitEdit(d: Project, clipId: string, frames: number, kind: 'j' | 'l') {
@@ -338,48 +222,72 @@ export function splitEdit(d: Project, clipId: string, frames: number, kind: 'j' 
   return out;
 }
 
-// ---------------- text cards ----------------
-
-export interface DocStyle {
-  font: string;
-  color: string;
-  accent: string;
-  bold: boolean;
-  italic: boolean;
-  blur: number;
-  darken: number;
-  source: string;
-}
-
-/** Read the card style from FraggedIn/style.md: "font: …", "accent: #…", "text colour: …", "card blur", "card darken". */
-export function parseStyle(md?: string): DocStyle {
-  const st: DocStyle = { font: 'Inter', color: '#ffffff', accent: '#e63946', bold: true, italic: false, blur: 18, darken: 45, source: md ? 'style.md' : 'defaults' };
-  if (!md) return st;
-  const get = (re: RegExp) => {
-    for (const line of md.split(/\r?\n/)) {
-      const m = line.replace(/[*_`>|]/g, ' ').match(/^\s*[-•]?\s*([A-Za-z][A-Za-z /()-]{1,40}?)\s*[:=–—]\s*(.+?)\s*$/);
-      if (m && re.test(m[1].trim())) return m[2].trim();
+/**
+ * jl_cut: the clip's linked sound starts `lead` seconds before its picture and/or ends `tail` seconds after it,
+ * snapped to whole frames, without unlinking. A side left undefined keeps its current offset.
+ */
+export function jlCut(d: Project, clipId: string, lead?: number, tail?: number) {
+  if (lead == null && tail == null) throw new Error('Pass audio_lead and/or audio_tail (seconds)');
+  const fps = d.settings.fps;
+  const c = getClip(d, clipId);
+  const group = linkedGroup(d, c);
+  const pic = group.find((g) => g.kind !== 'audio');
+  const audio = group.filter((g) => g.kind === 'audio');
+  if (!pic || !audio.length) throw new Error(`${clipId} has no linked picture and sound (link_clips links them)`);
+  const out: any[] = [];
+  for (const a of audio) {
+    assertUnlocked(d, a.trackId);
+    const ex = new Set(group.map((g) => g.id));
+    if (lead != null) {
+      const f = Math.round(lead * fps);
+      const want = Math.max(0, pic.start - f / fps);
+      if (want < a.start) clearRegion(d, a.trackId, want, a.start, ex);
+      trimStart(d, a, want);
     }
-    return undefined;
-  };
-  const hex = (v?: string) => v?.match(/#[0-9a-f]{3,8}\b/i)?.[0];
-  const font = get(/^(font|font family|typeface|heading font|title font|display font|fonts?)$/i);
-  if (font) {
-    st.font = font.split(/[,(;]/)[0].replace(/["']/g, '').replace(/\b(black|bold|heavy|extra ?bold|semi ?bold|italic|regular|medium|light)\b/gi, '').trim() || st.font;
-    st.italic = /italic/i.test(font);
-    st.bold = !/\b(regular|light|thin)\b/i.test(font);
+    if (tail != null) {
+      const f = Math.round(tail * fps);
+      const want = clipEnd(pic) + f / fps;
+      if (want > clipEnd(a)) clearRegion(d, a.trackId, clipEnd(a), want, ex);
+      trimEnd(d, a, want);
+    }
+    const leadF = Math.round((pic.start - a.start) * fps);
+    const tailF = Math.round((clipEnd(a) - clipEnd(pic)) * fps);
+    const o: any = { audio: a.id, picture: pic.id, audio_start: r3(a.start), picture_start: r3(pic.start), audio_end: r3(clipEnd(a)), picture_end: r3(clipEnd(pic)), lead_frames: leadF, tail_frames: tailF, lead_s: r3(leadF / fps), tail_s: r3(tailF / fps) };
+    if (lead != null && leadF !== Math.round(lead * fps)) o.note = `the source has no sound before ${r3(a.in)} s, so the lead stops at ${leadF} frames`;
+    if (tail != null && tailF !== Math.round(tail * fps)) o.note = `${o.note ? o.note + '; ' : ''}the source ends, so the tail stops at ${tailF} frames`;
+    out.push(o);
   }
-  st.accent = hex(get(/^(accent|accent colou?r|highlight|highlight colou?r|brand colou?r|colou?r accent)$/i)) ?? st.accent;
-  st.color = hex(get(/^(text|text colou?r|primary|primary colou?r|main colou?r|white)$/i)) ?? st.color;
-  const blur = get(/^(card blur|background blur|blur)$/i);
-  if (blur && num(blur) != null) st.blur = num(blur)!;
-  const dark = get(/^(card darken|background darken|darken|dim)$/i);
-  if (dark && num(dark) != null) st.darken = num(dark)!;
-  return st;
+  return { fps, clips: out };
 }
 
-export const CARD_PRESETS = ['chapter_card', 'date_card', 'quote_card', 'name_super', 'list_card'] as const;
-export type CardPreset = (typeof CARD_PRESETS)[number];
+export function linkClips(d: Project, ids: string[]) {
+  const clips = [...new Set(ids)].map((id) => getClip(d, id));
+  if (clips.length < 2) throw new Error('Pass two or more clip_ids');
+  for (const c of clips) assertUnlocked(d, c.trackId);
+  const id = nid(d, 'L');
+  for (const c of clips) c.linkId = id;
+  return { link: id, clips: clips.map((c) => c.id) };
+}
+
+export function unlinkClips(d: Project, ids: string[]) {
+  const done: string[] = [];
+  for (const cid of ids) {
+    const c = getClip(d, cid);
+    if (!c.linkId) continue;
+    const group = linkedGroup(d, c);
+    c.linkId = null;
+    done.push(c.id);
+    // a partner left on its own is no longer linked either
+    const rest = group.filter((g) => g.id !== c.id && g.linkId);
+    if (rest.length === 1) {
+      rest[0].linkId = null;
+      done.push(rest[0].id);
+    }
+  }
+  return { unlinked: [...new Set(done)] };
+}
+
+// ---------------- text cards ----------------
 
 function wrap(text: string, max: number) {
   return text
@@ -407,10 +315,19 @@ function textClip(d: Project, trackId: string, at: number, dur: number, st: Text
   });
 }
 
-/** Lay a text card over [at, at+dur): blurred/darkened footage behind it (adjustment layer), main line, subtitle. */
-export function addTextCard(d: Project, a: { preset: CardPreset; text: string; at: number; dur: number; subtitle?: string; style?: DocStyle; marker?: boolean; meta?: Clip['meta'] }) {
+export type Backdrop = 'blur' | 'black' | 'none';
+
+/**
+ * Lay a text card over [at, at+dur) in one go: the backdrop on the Adjustments track (V3: a blur-and-darken
+ * adjustment layer over the footage, or a black matte), the main line on Cards (V4), the subtitle above it.
+ */
+export function addTextCard(
+  d: Project,
+  a: { preset: CardPreset; text: string; at: number; dur: number; subtitle?: string; style?: DocStyle; marker?: boolean; meta?: Clip['meta']; backdrop?: Backdrop },
+) {
   const preset = a.preset;
   if (!CARD_PRESETS.includes(preset)) throw new Error(`Unknown preset "${preset}". Presets: ${CARD_PRESETS.join(', ')}`);
+  if (!(a.dur > 0)) throw new Error('A card needs a duration above 0');
   const st = a.style ?? parseStyle();
   const W = d.settings.width;
   const H = d.settings.height;
@@ -420,15 +337,19 @@ export function addTextCard(d: Project, a: { preset: CardPreset; text: string; a
   const base: TextStyle = { ...DEFAULT_TEXT, font: st.font, color: st.color, bold: st.bold, italic: st.italic, align: 'center', shadow: true, strokeWidth: 0, backgroundOpacity: 0, content: '' };
   const created: string[] = [];
   const meta = { ...(a.meta ?? {}), preset, role: 'card' };
-  const withBg = preset !== 'name_super';
+  const backdrop: Backdrop = a.backdrop ?? (preset === 'name_super' ? 'none' : 'blur');
+  if (!['blur', 'black', 'none'].includes(backdrop)) throw new Error(`backdrop "${backdrop}": use blur, black or none`);
   const fade = preset === 'name_super' ? 0.3 : 0.5;
-  let bgIdx = 0;
-  if (withBg) {
-    const tr = freeVideoFrom(d, 1, at, end);
-    const bg = makeClip(d, {
-      kind: 'adjustment', trackId: tr.id, start: at, duration: a.dur, name: `${preset} background`,
-      fx: { ...DEFAULT_FX, blur: Math.round(st.blur * k), brightness: -Math.abs(st.darken) }, fadeIn: fade, fadeOut: fade, meta: { ...meta, role: 'card_bg' },
-    });
+  let bgIdx = 2;
+  if (backdrop !== 'none') {
+    const tr = freeVideoFrom(d, 2, at, end, 'Adjustments');
+    const bg =
+      backdrop === 'blur'
+        ? makeClip(d, {
+            kind: 'adjustment', trackId: tr.id, start: at, duration: a.dur, name: `${preset} background`,
+            fx: { ...DEFAULT_FX, blur: Math.round(st.blur * k), brightness: -Math.abs(st.darken) }, fadeIn: fade, fadeOut: fade, meta: { ...meta, role: 'card_bg' },
+          })
+        : makeClip(d, { kind: 'color', trackId: tr.id, start: at, duration: a.dur, name: `${preset} black`, color: '#000000', fadeIn: fade, fadeOut: fade, meta: { ...meta, role: 'card_bg' } });
     d.clips.push(bg);
     created.push(bg.id);
     bgIdx = tracksOf(d, 'video').indexOf(tr);
@@ -484,13 +405,13 @@ export function addTextCard(d: Project, a: { preset: CardPreset; text: string; a
       sy = my + 52 * k;
     }
   }
-  const mt = freeVideoFrom(d, Math.max(2, bgIdx + 1), at, end, 'Text');
+  const mt = freeVideoFrom(d, Math.max(3, bgIdx + 1), at, end, 'Cards');
   const mc = textClip(d, mt.id, at, a.dur, main, mx, my, fade);
   mc.meta = meta;
   d.clips.push(mc);
   created.push(mc.id);
   if (sub) {
-    const stTrack = freeVideoFrom(d, tracksOf(d, 'video').indexOf(mt) + 1, at, end, 'Text 2');
+    const stTrack = freeVideoFrom(d, tracksOf(d, 'video').indexOf(mt) + 1, at, end, 'Cards 2');
     const sc = textClip(d, stTrack.id, at, a.dur, sub, sx, sy, fade);
     sc.meta = meta;
     d.clips.push(sc);
@@ -503,7 +424,7 @@ export function addTextCard(d: Project, a: { preset: CardPreset; text: string; a
     d.markers.push(mk);
     marker = mk.id;
   }
-  return { created, chapter_marker: marker, style: st.source };
+  return { created, backdrop, chapter_marker: marker, style: st.source };
 }
 
 // ---------------- panels ----------------
@@ -674,6 +595,44 @@ export function duck(d: Project, a: any) {
   return { music_track: trackLabel(d, music), key_track: trackLabel(d, key), ducked_clips: targets.map((c) => c.id), speech_regions: regions.length, speech_seconds: r3(speech), depth_db: depth };
 }
 
+/**
+ * duck_audio: ducking written as the target clips' volume keyframes, keyed from the key tracks' waveforms.
+ * Down by depth over `attack` before the sound starts, held `hold` after it stops, back up over `release`.
+ */
+export function duckAudio(d: Project, a: any) {
+  const targets = ((a.target_tracks?.length ? a.target_tracks : null) ?? [roleTrack(d, 'music').id]).map((t: string) => (typeof t === 'string' ? getTrack(d, t) : t)) as Track[];
+  const keys = ((a.key_tracks?.length ? a.key_tracks : null) ?? [roleTrack(d, 'narration').id]).map((t: string) => getTrack(d, t)) as Track[];
+  for (const t of [...targets, ...keys]) if (t.kind !== 'audio') throw new Error(`${trackLabel(d, t)} is a video track; duck_audio works on audio tracks`);
+  const keyIds = new Set(keys.map((t) => t.id));
+  const clash = targets.find((t) => keyIds.has(t.id));
+  if (clash) throw new Error(`${trackLabel(d, clash)} is both a target and a key track`);
+  const depth = Math.abs(a.depth_db ?? 15);
+  const att = Math.max(0, a.attack ?? 0.15);
+  const rel = Math.max(0, a.release ?? 0.6);
+  const hold = Math.max(0, a.hold ?? 0.2);
+  const keyClips = keys.flatMap((t) => audioClipsOn(d, t));
+  const noWave = keyClips.filter((c) => mediaOf(d, c)?.hasAudio && !mediaOf(d, c)?.peaks?.length).map((c) => c.id);
+  const regions = loudRanges(d, keyClips, a.threshold_db ?? -40, att + rel + hold);
+  const pts: [number, number][] = [];
+  for (const [s, e] of regions) pts.push([s - att, 0], [s, -depth], [e + hold, -depth], [e + hold + rel, 0]);
+  const clips = targets.flatMap((t) => audioClipsOn(d, t));
+  const out: any[] = [];
+  for (const c of clips) {
+    assertUnlocked(d, c.trackId);
+    const hit = pts.length && pts.some(([t]) => t > c.start - rel - att && t < clipEnd(c) + rel + att);
+    setGainLayer(c, 'duck', hit ? localPoints(c, pts) : null);
+    out.push({ clip: c.id, track: trackLabel(d, c.trackId), keyframes: (c.keyframes?.volume ?? []).map((k) => ({ t: r3(c.start + k.t), db: k.v })), note: 'keyframe t is timeline seconds (stored clip-relative)' });
+  }
+  return {
+    target_tracks: targets.map((t) => trackLabel(d, t)),
+    key_tracks: keys.map((t) => trackLabel(d, t)),
+    depth_db: depth, threshold_db: a.threshold_db ?? -40, attack: att, release: rel, hold,
+    key_regions: regions.map(([s, e]) => [r3(s), r3(e)]),
+    clips: out,
+    ...(noWave.length ? { warning: `No waveform yet for ${noWave.join(', ')}: treated as sound all the way through` } : {}),
+  };
+}
+
 function envelopeOn(d: Project, clips: Clip[], name: string, pts: [number, number][] | null) {
   const a = pts?.[0][0] ?? -Infinity;
   const b = pts?.[pts.length - 1][0] ?? Infinity;
@@ -797,73 +756,8 @@ export function ambienceFill(d: Project, a: { media: MediaItem; track?: string; 
 
 // ---------------- EDL ----------------
 
-const VIDEO_T = new Set(['footage', 'video', 'clip', 'broll', 'b_roll', 'gameplay', 'archive', 'stock', 'raw', 'raw_clip', 'reaction', 'recreation', 'interview', 'stream', 'vod', 'main_clip']);
-const IMAGE_T = new Set(['image', 'still', 'photo', 'art', 'artwork', 'thumbnail', 'map', 'graphic']);
-const PANEL_T = new Set(['panel', 'screenshot', 'document', 'doc', 'tweet', 'post', 'article', 'headline', 'chat', 'web', 'webpage', 'reddit']);
-const BLACK_T = new Set(['black', 'none', 'gap', 'silence', 'empty']);
-
-export interface EdlRow {
-  line: string;
-  id: string;
-  tin?: number;
-  tout?: number;
-  type: string;
-  source: string;
-  sin?: number;
-  sout?: number;
-  text: string;
-  motion: string;
-  transition: string;
-  audioDb: string;
-  music: string;
-  sfx: string;
-  credit: string;
-  hold: boolean;
-}
-
-export function edlRows(rows: Row[], fps: number): EdlRow[] {
-  return rows.map((r, i) => ({
-    line: r._line,
-    id: pick(r, 'id', 'shot', 'row', 'shot_id', 'n', 'no') || `row${i + 1}`,
-    tin: parseTime(pick(r, 'timeline_in', 'tl_in', 'record_in', 'rec_in', 'in', 'start', 'timeline_start'), fps),
-    tout: parseTime(pick(r, 'timeline_out', 'tl_out', 'record_out', 'rec_out', 'out', 'end', 'timeline_end'), fps),
-    type: pick(r, 'visual_type', 'type', 'visual', 'kind').toLowerCase().replace(/[\s-]+/g, '_'),
-    source: pick(r, 'source', 'src', 'file', 'media', 'path', 'asset', 'clip'),
-    sin: parseTime(pick(r, 'source_in', 'src_in', 'clip_in', 'source_start'), fps),
-    sout: parseTime(pick(r, 'source_out', 'src_out', 'clip_out', 'source_end'), fps),
-    text: pick(r, 'on_screen_text', 'text', 'ost', 'caption', 'super', 'title'),
-    motion: pick(r, 'motion', 'move', 'camera'),
-    transition: pick(r, 'transition_in', 'transition', 'trans_in', 'trans'),
-    audioDb: pick(r, 'clip_audio_db', 'clip_audio', 'audio_db', 'clip_db'),
-    music: pick(r, 'music_cue', 'music'),
-    sfx: pick(r, 'sfx', 'sound', 'sound_fx'),
-    credit: pick(r, 'credit', 'credits', 'attribution', 'source_credit'),
-    hold: truthy(pick(r, 'deliberate_hold', 'hold', 'deliberate')),
-  }));
-}
-
-function cardOf(type: string): CardPreset | null {
-  if ((CARD_PRESETS as readonly string[]).includes(type)) return type as CardPreset;
-  if (['card', 'title', 'title_card', 'chapter', 'text'].includes(type)) return 'chapter_card';
-  if (['date', 'date_title'].includes(type)) return 'date_card';
-  if (['quote'].includes(type)) return 'quote_card';
-  if (['lower_third', 'name', 'super', 'lowerthird'].includes(type)) return 'name_super';
-  if (['list', 'bullets'].includes(type)) return 'list_card';
-  return null;
-}
-
-/** "main | subtitle", optionally prefixed "preset: " */
-function cardText(s: string): { preset?: CardPreset; main: string; sub?: string } {
-  let t = s.trim();
-  let preset: CardPreset | undefined;
-  const m = t.match(/^([a-z_ ]+):\s*(.+)$/i);
-  if (m && cardOf(m[1].toLowerCase().trim().replace(/\s+/g, '_'))) {
-    preset = cardOf(m[1].toLowerCase().trim().replace(/\s+/g, '_'))!;
-    t = m[2];
-  }
-  const [main, ...rest] = t.split(/\s+\|\s+|\s*\|\s*/);
-  return { preset, main: main.replace(/\\n/g, '\n'), sub: rest.join(' | ') || undefined };
-}
+const rowRole = (type: string) => (VISUAL.raw.has(type) ? 'raw' : type === 'recreation' ? 'recreation' : 'footage');
+const isHex = (s: string) => /^#[0-9a-f]{3,8}$/i.test(s.trim());
 
 export function applyEdl(d: Project, rows: EdlRow[], o: { baseDir?: string; style: DocStyle; replace?: boolean; template?: boolean }) {
   if (o.template !== false) applyTemplate(d);
@@ -871,12 +765,14 @@ export function applyEdl(d: Project, rows: EdlRow[], o: { baseDir?: string; styl
   const ids = new Set(rows.map((r) => r.id));
   if (o.replace !== false) {
     d.clips = d.clips.filter((c) => !(c.meta?.edl && ids.has(c.meta.edl)));
-    d.markers = d.markers.filter((m) => !(m.kind === 'hold' && m.note && ids.has(m.note.replace(/^EDL /, ''))));
+    d.markers = d.markers.filter((m) => !((m.kind === 'hold' || m.kind === 'chapter') && m.note && ids.has(m.note.replace(/^EDL /, ''))));
   }
   const report: any[] = [];
   const skipped: { id: string; line: string; reason: string }[] = [];
   const notes: string[] = [];
   const sorted = [...rows].sort((a, b) => (a.tin ?? 0) - (b.tin ?? 0));
+  const sections = new Set<string>();
+  let prevPic: Clip | undefined;
   for (const r of sorted) {
     const skip = (reason: string) => skipped.push({ id: r.id, line: r.line, reason });
     try {
@@ -884,27 +780,40 @@ export function applyEdl(d: Project, rows: EdlRow[], o: { baseDir?: string; styl
         skip('no timeline_in');
         continue;
       }
+      const sec = r.section.trim().toLowerCase();
+      const firstOfSection = !!sec && !sections.has(sec);
+      if (sec) sections.add(sec);
       let dur = r.tout != null ? r.tout - r.tin : r.sout != null ? r.sout - (r.sin ?? 0) : undefined;
       let type = r.type;
-      const card = cardOf(type);
-      const src = r.source ? findMedia(d, r.source, o.baseDir) : undefined;
-      if (r.source && !src && !BLACK_T.has(type)) {
-        skip(`source "${r.source}" not found (not in the bin and not a file that could be imported)`);
+      const isCard = type === 'card' || type === 'text_card' || !!cardOf(type);
+      const url = r.source && isUrl(r.source);
+      if (url && !isCard) {
+        skip(`source_file_or_url is a link (${r.source}): download it first (download_media) and put the file's path in the EDL`);
+        continue;
+      }
+      if (url) notes.push(`${r.id}: the card's source is a link, so it is shown over black`);
+      const src = r.source && !url && !isHex(r.source) ? findMedia(d, r.source, o.baseDir) : undefined;
+      if (r.source && !url && !isHex(r.source) && !src && !VISUAL.black.has(type)) {
+        skip(`source "${r.source}" not found (not in the bin, and no such file next to the CSV)`);
         continue;
       }
       if (!type) type = src ? (src.type === 'image' ? 'image' : src.type === 'audio' ? 'audio' : 'footage') : r.text ? 'name_super' : 'black';
-      if (src?.type === 'image' && VIDEO_T.has(type)) type = 'image';
+      if (src?.type === 'audio') {
+        skip(`${src.name} is audio only: put sound in the cue sheet (05_cues.csv)`);
+        continue;
+      }
+      if (src?.type === 'image' && VISUAL.video.has(type)) type = 'image';
       if (dur == null && src?.type === 'video') dur = (src.duration || 0) - (r.sin ?? 0);
       if (dur == null || !(dur > 0)) {
-        skip('no length: give timeline_out (or source_in/source_out)');
+        skip('no length: give timeline_out (or source_in and source_out)');
         continue;
       }
       dur = Math.max(1 / fps, dur);
-      const meta = { edl: r.id, ...(r.credit ? { credit: r.credit } : {}), ...(r.hold ? { hold: true } : {}) };
+      const meta = { edl: r.id, ...(r.type ? { visual: r.type } : {}), ...(r.section ? { section: r.section } : {}), ...(r.credit ? { credit: r.credit } : {}), ...(r.hold ? { hold: true } : {}) };
       const made: string[] = [];
       let pic: Clip | undefined;
-      const role = ['raw', 'raw_clip', 'reaction', 'main_clip'].includes(type) ? 'raw' : type === 'recreation' ? 'recreation' : 'footage';
-      if (src && (VIDEO_T.has(type) || IMAGE_T.has(type) || card)) {
+      let onFootage = false;
+      if (src && (VISUAL.video.has(type) || VISUAL.image.has(type) || isCard)) {
         const db = num(r.audioDb);
         const withAudio = src.hasAudio && db != null && !/mute|off|none|-inf/i.test(r.audioDb);
         const clips = placeMedia(d, src, {
@@ -912,19 +821,19 @@ export function applyEdl(d: Project, rows: EdlRow[], o: { baseDir?: string; styl
           srcIn: r.sin, includeAudio: withAudio,
         });
         for (const c of clips) {
-          c.meta = { ...meta, role: c.kind === 'audio' ? 'clip_audio' : role };
+          c.meta = { ...meta, role: c.kind === 'audio' ? 'clip_audio' : rowRole(type) };
           if (c.kind === 'audio' && db != null) c.volume = Math.max(-60, Math.min(24, db));
           made.push(c.id);
         }
         pic = clips.find((c) => c.kind !== 'audio');
+        onFootage = !!pic;
         if (r.sout != null && r.sin != null && Math.abs(r.sout - r.sin - dur) > 1.5 / fps && src.type !== 'image')
           notes.push(`${r.id}: source range is ${r3(r.sout - r.sin)} s but the timeline slot is ${r3(dur)} s — used the slot length from source_in`);
-        if (src.type === 'audio') notes.push(`${r.id}: ${src.name} is audio only`);
-      } else if (src && PANEL_T.has(type)) {
+      } else if (src && VISUAL.panel.has(type)) {
         const res = addPanel(d, { media: src, at: r.tin, dur, source_in: r.sin, push: 0, meta });
         made.push(...res.created);
         pic = d.clips.find((c) => c.id === res.panel);
-      } else if (type.startsWith('color') || /^#[0-9a-f]{3,8}$/i.test(r.source)) {
+      } else if (type.startsWith('color') || isHex(r.source)) {
         const color = r.source.match(/#[0-9a-f]{3,8}/i)?.[0] ?? '#000000';
         const tr = roleTrack(d, 'footage');
         clearRegion(d, tr.id, r.tin, r.tin + dur);
@@ -932,35 +841,56 @@ export function applyEdl(d: Project, rows: EdlRow[], o: { baseDir?: string; styl
         d.clips.push(c);
         made.push(c.id);
         pic = c;
-      } else if (BLACK_T.has(type) || card) {
-        // nothing on the footage track (black), or a card over whatever is there
+        onFootage = true;
+      } else if (VISUAL.black.has(type) || isCard) {
+        // nothing on the footage track (black), or a card over black / over another row's footage
       } else if (!src) {
-        skip(`visual_type "${r.type}" needs a source`);
+        skip(`visual_type "${r.type}" needs a source_file_or_url`);
         continue;
       } else {
-        skip(`visual_type "${r.type}" not understood (footage, image, panel, ${CARD_PRESETS.join(', ')}, black)`);
+        skip(`visual_type "${r.type}" not understood (original_clip, artifact, interview, photo, recreation, era_broll, illustration, gameplay, card)`);
         continue;
       }
       if (pic && r.motion) {
         const mo = parseMotion(r.motion);
         if (mo) applyMotion(d, pic, mo.type, mo.amount ?? 3, 'inOut', mo.direction);
       }
-      if (pic && r.transition) {
-        const tr = parseTransition(r.transition);
-        if (tr && tr.type !== 'cut') pic.transitionIn = { type: tr.type, duration: Math.min(tr.duration ?? 0.5, pic.duration) };
-        else if (tr) pic.transitionIn = null;
-      }
-      if (r.text || card) {
+      let preset: CardPreset | undefined;
+      if (r.text || isCard) {
         const ct = cardText(r.text || '');
-        const preset = card ?? ct.preset ?? 'name_super';
+        preset = cardOf(type) ?? ct.preset ?? (isCard ? inferCard(r.text || '') : 'name_super');
         if (ct.main) {
-          const res = addTextCard(d, { preset, text: ct.main, subtitle: ct.sub, at: r.tin, dur, style: o.style, meta });
+          const explicitChapter = cardOf(type) === 'chapter_card' || ct.preset === 'chapter_card';
+          const marker = preset === 'chapter_card' && (explicitChapter || firstOfSection || /^(chapter|part)\b/i.test(ct.main) || (!!sec && ct.main.toLowerCase().includes(sec)));
+          const under = d.clips.some((c) => c.trackId === roleTrack(d, 'footage').id && c.kind !== 'audio' && c.start < r.tin! + dur! - EPS && clipEnd(c) > r.tin! + EPS);
+          const backdrop: Backdrop = preset === 'name_super' && !isCard ? 'none' : under ? 'blur' : 'black';
+          const res = addTextCard(d, { preset, text: ct.main, subtitle: ct.sub, at: r.tin, dur, style: o.style, meta, marker, backdrop });
           made.push(...res.created);
-        } else if (card) notes.push(`${r.id}: ${preset} without on_screen_text`);
+          if (res.chapter_marker) {
+            const mk = d.markers.find((m) => m.id === res.chapter_marker);
+            if (mk) mk.note = `EDL ${r.id}`;
+          }
+          if (!pic) pic = d.clips.find((c) => c.id === res.created[0] && c.kind === 'color');
+        } else if (isCard) notes.push(`${r.id}: a card without on_screen_text`);
       }
-      if (r.sfx && MEDIA_EXT.test(r.sfx.split('@')[0].trim())) {
+      if (r.transition) {
+        const tr = parseTransition(r.transition);
+        if (tr && (tr.type === 'j_cut' || tr.type === 'l_cut')) {
+          const f = ('frames' in tr ? tr.frames : undefined) ?? 10;
+          if (tr.type === 'j_cut') {
+            if (pic && linkedGroup(d, pic).some((g) => g.kind === 'audio')) jlCut(d, pic.id, f / fps);
+            else notes.push(`${r.id}: j_cut needs the shot's own sound (give clip_audio_db)`);
+          } else if (prevPic && d.clips.includes(prevPic) && linkedGroup(d, prevPic).some((g) => g.kind === 'audio')) jlCut(d, prevPic.id, undefined, f / fps);
+          else notes.push(`${r.id}: l_cut needs the previous shot's sound (give it a clip_audio_db)`);
+          if (pic) pic.transitionIn = null;
+        } else if (tr && pic) {
+          if (tr.type !== 'cut') pic.transitionIn = { type: tr.type as TransitionType, duration: Math.min(('duration' in tr ? tr.duration : undefined) ?? 0.5, pic.duration) };
+          else pic.transitionIn = null;
+        }
+      }
+      if (r.sfx) {
         const [file, g] = r.sfx.split('@');
-        const m = findMedia(d, file.trim(), o.baseDir);
+        const m = MEDIA_EXT.test(file.trim()) ? findMedia(d, file.trim(), o.baseDir) : undefined;
         if (m) {
           const len = m.duration || 1;
           const tr = freeAudioLike(d, roleTrack(d, 'sfx'), r.tin, r.tin + len);
@@ -970,15 +900,17 @@ export function applyEdl(d: Project, rows: EdlRow[], o: { baseDir?: string; styl
             c.meta = { ...meta, role: 'sfx' };
             made.push(c.id);
           }
-        } else notes.push(`${r.id}: sfx file "${file.trim()}" not found`);
+        } else if (MEDIA_EXT.test(file.trim())) notes.push(`${r.id}: sfx file "${file.trim()}" not found`);
       }
       if (r.hold) d.markers.push({ id: nid(d, 'k'), time: r3(r.tin), duration: r3(dur), name: `Hold ${r.id}`, color: '#7f8fa6', kind: 'hold', note: `EDL ${r.id}` });
-      report.push({ id: r.id, type, start: r3(r.tin), end: r3(r.tin + dur), clips: made });
+      if (onFootage) prevPic = pic;
+      report.push({ id: r.id, type, ...(preset ? { card: preset } : {}), start: r3(r.tin), end: r3(r.tin + dur), clips: made });
     } catch (e: any) {
       skip(e.message);
     }
   }
-  if (rows.some((r) => r.music && !MEDIA_EXT.test(r.music))) notes.push('music_cue values are labels: place the music itself with import_cues');
+  if (rows.some((r) => r.music && !MEDIA_EXT.test(r.music))) notes.push('music_cue values are labels: the music itself comes from the cue sheet (import_cues)');
+  if (rows.some((r) => r.sfx && !MEDIA_EXT.test(r.sfx.split('@')[0].trim()))) notes.push('sfx values that are not file names are kept as notes (place the sound with the cue sheet)');
   return { rows: rows.length, placed: report.length, skipped, notes, created: report };
 }
 
@@ -991,25 +923,29 @@ export function checkEdl(d: Project, rows: EdlRow[], tolFrames = 1) {
   const slipped: any[] = [];
   let ok = 0;
   const ids = new Set(rows.map((r) => r.id));
-  for (const r of rows) {
-    if (r.tin == null || BLACK_T.has(r.type)) continue;
+  const checked = rows.filter((r) => r.tin != null && !VISUAL.black.has(r.type));
+  for (const r of checked) {
     const clips = d.clips.filter((c) => c.meta?.edl === r.id);
-    const pic = clips.find((c) => c.kind === 'video' || c.kind === 'image' || c.kind === 'color') ?? clips.find((c) => c.meta?.role === 'panel') ?? clips.find((c) => c.kind === 'text');
+    const pic =
+      clips.find((c) => (c.kind === 'video' || c.kind === 'image' || c.kind === 'color') && c.meta?.role !== 'card_bg') ??
+      clips.find((c) => c.meta?.role === 'panel') ??
+      clips.find((c) => c.kind === 'color') ??
+      clips.find((c) => c.kind === 'text');
     if (!pic) {
-      missing.push({ id: r.id, line: r.line, expected_start: r3(r.tin) });
+      missing.push({ id: r.id, line: r.line, expected_start: r3(r.tin!) });
       continue;
     }
-    const dur = r.tout != null ? r.tout - r.tin : r.sout != null ? r.sout - (r.sin ?? 0) : pic.duration;
+    const dur = r.tout != null ? r.tout - r.tin! : r.sout != null ? r.sout - (r.sin ?? 0) : pic.duration;
     let good = true;
-    if (Math.abs(pic.start - r.tin) > tol) {
-      moved.push({ id: r.id, clip: pic.id, expected_start: r3(r.tin), actual_start: r3(pic.start), by: r3(pic.start - r.tin) });
+    if (Math.abs(pic.start - r.tin!) > tol) {
+      moved.push({ id: r.id, clip: pic.id, expected_start: r3(r.tin!), actual_start: r3(pic.start), by: r3(pic.start - r.tin!) });
       good = false;
     }
     if (Math.abs(pic.duration - dur) > tol) {
       wrongLength.push({ id: r.id, clip: pic.id, expected: r3(dur), actual: r3(pic.duration) });
       good = false;
     }
-    if (r.sin != null && (pic.kind === 'video') && Math.abs(pic.in - r.sin) > tol) {
+    if (r.sin != null && pic.kind === 'video' && Math.abs(pic.in - r.sin) > tol) {
       slipped.push({ id: r.id, clip: pic.id, expected_source_in: r3(r.sin), actual_source_in: r3(pic.in) });
       good = false;
     }
@@ -1017,90 +953,121 @@ export function checkEdl(d: Project, rows: EdlRow[], tolFrames = 1) {
   }
   const extra = [...new Set(d.clips.filter((c) => c.meta?.edl && !ids.has(c.meta.edl)).map((c) => c.meta!.edl!))];
   const untracked = d.clips.filter((c) => !c.meta?.edl && c.kind !== 'audio' && c.meta?.role !== 'ambience').length;
-  return { rows_checked: rows.filter((r) => r.tin != null && !BLACK_T.has(r.type)).length, matching: ok, missing, moved, wrong_length: wrongLength, slipped, clips_from_rows_not_in_file: extra, visual_clips_without_edl_id: untracked };
+  return {
+    rows_checked: checked.length,
+    matching: ok,
+    differences: missing.length + moved.length + wrongLength.length + slipped.length + extra.length,
+    missing,
+    moved,
+    wrong_length: wrongLength,
+    slipped,
+    clips_from_rows_not_in_file: extra,
+    visual_clips_without_edl_id: untracked,
+  };
 }
 
 // ---------------- cues ----------------
 
-export interface CueRow {
-  line: string;
-  id: string;
-  type: string;
-  tin?: number;
-  tout?: number;
-  source: string;
-  sin?: number;
-  gain?: number;
-  fadeIn?: number;
-  fadeOut?: number;
-  duck: boolean;
-  duckDepth?: number;
-  loop: boolean;
-  snap: string;
-  credit: string;
+/** The file a cue plays: named in track_title / source_and_licence, else the file in `files` matching track_title. */
+export function cueFile(r: CueRow, files: string[] = []) {
+  return r.file ?? (r.title ? matchTitle(r.title, files) : undefined);
 }
 
-export function cueRows(rows: Row[], fps: number): CueRow[] {
-  return rows.map((r, i) => ({
-    line: r._line,
-    id: pick(r, 'id', 'cue', 'cue_id', 'n') || `cue${i + 1}`,
-    type: pick(r, 'type', 'kind', 'cue_type', 'layer').toLowerCase().replace(/[\s-]+/g, '_'),
-    tin: parseTime(pick(r, 'timeline_in', 'tl_in', 'in', 'start', 'timeline_start'), fps),
-    tout: parseTime(pick(r, 'timeline_out', 'tl_out', 'out', 'end', 'timeline_end'), fps),
-    source: pick(r, 'source', 'src', 'file', 'track', 'media', 'path'),
-    sin: parseTime(pick(r, 'source_in', 'src_in', 'offset', 'source_start'), fps),
-    gain: num(pick(r, 'gain_db', 'level_db', 'db', 'volume_db', 'gain', 'level')),
-    fadeIn: num(pick(r, 'fade_in', 'fade_in_s', 'fadein')),
-    fadeOut: num(pick(r, 'fade_out', 'fade_out_s', 'fadeout')),
-    duck: truthy(pick(r, 'duck', 'ducked', 'duck_under_vo')),
-    duckDepth: num(pick(r, 'duck_depth_db', 'duck_db', 'duck_depth')),
-    loop: truthy(pick(r, 'loop', 'looped')),
-    snap: pick(r, 'snap', 'snap_to', 'start_on').toLowerCase(),
-    credit: pick(r, 'credit', 'credits', 'attribution', 'license'),
-  }));
+export function resolveCue(d: Project, r: CueRow, baseDir?: string, files: string[] = []) {
+  const f = cueFile(r, files);
+  return (f ? findMedia(d, f, baseDir) : undefined) ?? (r.title ? findMedia(d, r.title) : undefined);
 }
 
-export function applyCues(d: Project, rows: CueRow[], o: { baseDir?: string; replace?: boolean; template?: boolean }) {
+/** Audio clips a cue applies to on a track over [a, b). */
+const clipsIn = (d: Project, t: Track, a: number, b: number) => audioClipsOn(d, t).filter((c) => c.start < b - EPS && clipEnd(c) > a + EPS);
+
+const musicTracks = (d: Project) => {
+  const m = roleTrack(d, 'music');
+  return [m, ...d.tracks.filter((t) => t.kind === 'audio' && t.id !== m.id && /^music \d+$/i.test(t.name ?? ''))];
+};
+
+/**
+ * Place the cue sheet. `rel` is each cue's measured gain for 0 dB relative to the narration (narration LUFS − the
+ * cue's own LUFS, from DOC_ASYNC); without it level_vs_narration_db is applied as plain gain.
+ */
+export function applyCues(d: Project, rows: CueRow[], o: { baseDir?: string; files?: string[]; replace?: boolean; template?: boolean; rel?: Record<string, number>; duck?: boolean }) {
   if (o.template !== false) applyTemplate(d);
   const ids = new Set(rows.map((r) => r.id));
   if (o.replace !== false) {
     d.clips = d.clips.filter((c) => !(c.meta?.cue && ids.has(c.meta.cue)));
-    for (const c of d.clips) for (const id of ids) if (c.meta?.gainLayers?.[`cue:${id}`]) setGainLayer(c, `cue:${id}`, null);
+    for (const c of d.clips)
+      for (const id of ids) {
+        if (c.meta?.gainLayers?.[`cue:${id}`]) setGainLayer(c, `cue:${id}`, null);
+        if (c.meta?.gainLayers?.[`mute:cue:${id}`]) setGainLayer(c, `mute:cue:${id}`, null);
+      }
   }
   const placed: any[] = [];
   const skipped: any[] = [];
-  const toDuck: { clip: string; depth?: number }[] = [];
+  const notes: string[] = [];
+  const toDuck: { clip: string; depth: number }[] = [];
   const toSnap: { clip: string; grid: string }[] = [];
+  const toPhrase: { clip: string; end: number }[] = [];
   const total = Math.max(sequenceDuration(d), ...rows.map((r) => r.tout ?? 0));
-  for (const r of [...rows].sort((a, b) => (a.tin ?? 0) - (b.tin ?? 0))) {
+  const fps = d.settings.fps;
+  // the sound first, then the cues that shape it (silences, clip sound with the music out under it)
+  const later = (r: CueRow) => (r.type === "silence" || r.type === "clip_audio" ? 1 : 0);
+  for (const r of [...rows].sort((a, b) => later(a) - later(b) || (a.tin ?? 0) - (b.tin ?? 0))) {
     const skip = (reason: string) => skipped.push({ id: r.id, line: r.line, reason });
     try {
       if (r.tin == null) {
         skip('no timeline_in');
         continue;
       }
-      const type = r.type || (r.source ? 'music' : '');
+      const tin = r.tin;
+      const m = resolveCue(d, r, o.baseDir, o.files);
+      const type = r.type || (m ? 'music' : '');
       const meta = { cue: r.id, ...(r.credit ? { credit: r.credit } : {}) };
+      const rel = o.rel?.[r.id];
       if (type === 'silence') {
-        const tout = r.tout ?? r.tin + 2;
-        const fo = r.fadeOut ?? 1;
-        const fi = r.fadeIn ?? 1;
-        const music = audioClipsOn(d, roleTrack(d, 'music')).concat(d.tracks.filter((t) => t.kind === 'audio' && /^music \d+$/i.test(t.name ?? '')).flatMap((t) => audioClipsOn(d, t)));
-        const hit = envelopeOn(d, music, `cue:${r.id}`, [[r.tin - fo, 0], [r.tin, -60], [tout, -60], [tout + fi, 0]]);
-        placed.push({ id: r.id, type, silent: `${r3(r.tin)}–${r3(tout)}`, music_clips: hit });
+        // music and SFX that play through the silence fade down into it (entry fade) and back after it (exit
+        // fade); a cue that already ends at timeline_in or starts at timeline_out is left as it is
+        const tout = r.tout ?? tin + 2;
+        const into = r.fadeIn ?? 1;
+        const back = r.fadeOut ?? 1;
+        const clips = [...musicTracks(d), roleTrack(d, 'sfx')].flatMap((t) => clipsIn(d, t, tin, tout));
+        const hit = envelopeOn(d, clips, `cue:${r.id}`, [[tin - into, 0], [tin, -60], [tout, -60], [tout + back, 0]]);
+        placed.push({ id: r.id, type, silent: `${r3(tin)}–${r3(tout)}`, faded_clips: hit });
         continue;
       }
-      const m = r.source ? findMedia(d, r.source, o.baseDir) : undefined;
       if (type === 'clip_audio' && !m) {
+        // the sound of the clips already on A1 in this range: matched to the narration, music out under it
         const tout = r.tout ?? total;
-        const g = r.gain ?? 0;
-        const clips = audioClipsOn(d, roleTrack(d, 'clip_audio'));
-        const hit = envelopeOn(d, clips, `cue:${r.id}`, [[r.tin - 0.1, 0], [r.tin, g], [tout, g], [tout + 0.1, 0]]);
-        placed.push({ id: r.id, type, gain_db: g, clips: hit });
+        const clipT = roleTrack(d, 'clip_audio');
+        const clips = clipsIn(d, clipT, tin, tout);
+        if (!clips.length) {
+          skip(`no clip sound on ${trackLabel(d, clipT)} between ${r3(tin)} and ${r3(tout)} s (give the EDL row a clip_audio_db)`);
+          continue;
+        }
+        const out: any[] = [];
+        for (const c of clips) {
+          const want = rel != null ? rel + (r.level ?? 0) : r.level ?? r.gain;
+          if (want == null) continue;
+          const g = want - c.volume;
+          setGainLayer(c, `cue:${r.id}`, localPoints(c, [[tin - 0.05, 0], [tin, g], [tout, g], [tout + 0.05, 0]]));
+          out.push({ clip: c.id, gain_db: r3(want) });
+        }
+        // Reference F: no music under raw dialogue
+        const fi = r.fadeIn ?? 0.5;
+        const fo = r.fadeOut ?? 0.5;
+        const music = musicTracks(d).flatMap((t) => audioClipsOn(d, t));
+        const muted = envelopeOn(d, music, `mute:cue:${r.id}`, [[tin - fi, 0], [tin, -60], [tout, -60], [tout + fo, 0]]);
+        // entry j_cut / exit l_cut: the clip's sound leads into / tails out of its picture
+        const jl: any[] = [];
+        const first = clips[0];
+        const last = clips[clips.length - 1];
+        if (r.entry === 'j_cut' && linkedGroup(d, first).some((g) => g.kind !== 'audio')) jl.push(jlCut(d, first.id, 10 / fps));
+        if (r.exit === 'l_cut' && linkedGroup(d, last).some((g) => g.kind !== 'audio')) jl.push(jlCut(d, last.id, undefined, 10 / fps));
+        placed.push({ id: r.id, type, clips: out, music_out_under: muted, ...(jl.length ? { jl_cuts: jl.flatMap((x) => x.clips) } : {}) });
         continue;
       }
       if (!m) {
-        skip(r.source ? `source "${r.source}" not found` : 'no source');
+        const f = cueFile(r, o.files);
+        skip(f ? `"${f}" not found` : r.title ? `no file for track_title "${r.title}": name the file (e.g. music/${r.title.replace(/[^\w]+/g, '_').toLowerCase()}.wav) in track_title or source_and_licence, or put it in the CSV's folder` : 'no file (track_title)');
         continue;
       }
       if (!m.hasAudio) {
@@ -1108,20 +1075,39 @@ export function applyCues(d: Project, rows: CueRow[], o: { baseDir?: string; rep
         continue;
       }
       const role = (['music', 'sfx', 'ambience', 'clip_audio', 'narration'].includes(type) ? type : 'music') as keyof typeof ROLE_TRACK;
+      if (!['music', 'sfx', 'ambience', 'clip_audio', 'narration'].includes(type)) notes.push(`${r.id}: type "${r.type}" placed as music (types: music, silence, sfx, ambience, clip_audio)`);
       const sin = r.sin ?? 0;
       const len = m.duration || 0;
-      let end = r.tout ?? (role === 'ambience' ? total : r.tin + Math.max(0.04, len - sin));
-      if (!r.loop && role !== 'ambience') end = Math.min(end, r.tin + Math.max(0.04, len - sin));
-      const tr = freeAudioLike(d, roleTrack(d, role), r.tin, end);
+      let end = r.tout ?? (role === 'ambience' ? total : tin + Math.max(0.04, len - sin));
+      const loops = r.loop || role === 'ambience' || (role === 'music' && r.tout != null && /loop/i.test(r.notes));
+      if (!loops) end = Math.min(end, tin + Math.max(0.04, len - sin));
+      if (r.tout != null && end < r.tout - 0.5) notes.push(`${r.id}: ${m.name} is ${r3(len - sin)} s from its in point, shorter than the cue (${r3(r.tout - tin)} s); it ends at ${r3(end)} s (say "loop" in notes to loop it)`);
+      const tr = freeAudioLike(d, roleTrack(d, role), tin, end);
       assertUnlocked(d, tr.id);
+      let vol = r.gain ?? (role === 'ambience' ? -40 : role === 'music' ? -18 : 0);
+      let duckDepth: number | undefined;
+      if (r.level != null) {
+        if (rel != null) {
+          vol = rel + r.level;
+          if (o.duck && role === 'music' && r.level < 0) {
+            // the bed at the narration level in the gaps, level_vs_narration_db under the voice while it speaks
+            vol = rel;
+            duckDepth = -r.level;
+          }
+        } else {
+          vol = r.level;
+          notes.push(`${r.id}: no narration on A3 to measure against, so level_vs_narration_db ${r.level} was used as plain gain (place the narration first, then re-import)`);
+        }
+      }
+      vol = Math.max(-60, Math.min(24, Math.round(vol * 10) / 10));
       const made: string[] = [];
-      let t = r.tin;
+      let t = tin;
       let pos = sin;
       while (t < end - 0.02) {
         if (pos >= len - 0.05) pos = 0;
         const piece = Math.min(end - t, len - pos);
         clearRegion(d, tr.id, t, t + piece);
-        const c = makeClip(d, { kind: 'audio', trackId: tr.id, start: r3(t), duration: r3(piece), in: r3(pos), mediaId: m.id, name: m.name, volume: r.gain ?? (role === 'ambience' ? -40 : role === 'music' ? -18 : 0), meta: { ...meta, role } });
+        const c = makeClip(d, { kind: 'audio', trackId: tr.id, start: r3(t), duration: r3(piece), in: r3(pos), mediaId: m.id, name: m.name, volume: vol, meta: { ...meta, role } });
         d.clips.push(c);
         made.push(c.id);
         t += piece;
@@ -1131,16 +1117,50 @@ export function applyCues(d: Project, rows: CueRow[], o: { baseDir?: string; rep
       const last = d.clips.find((c) => c.id === made[made.length - 1]);
       if (first && r.fadeIn) first.fadeIn = Math.min(r.fadeIn, first.duration);
       if (last && r.fadeOut) last.fadeOut = Math.min(r.fadeOut, last.duration);
-      if (r.duck) made.forEach((id) => toDuck.push({ clip: id, depth: r.duckDepth }));
+      if (duckDepth != null || r.duck) made.forEach((id) => toDuck.push({ clip: id, depth: duckDepth ?? r.duckDepth ?? 15 }));
       if (r.snap && first) toSnap.push({ clip: first.id, grid: r.snap });
-      placed.push({ id: r.id, type: role, track: trackLabel(d, tr), start: r3(r.tin), end: r3(end), clips: made });
+      if (r.exit === 'cut_on_phrase' && last) toPhrase.push({ clip: last.id, end: clipEnd(last) });
+      placed.push({ id: r.id, type: role, file: m.name, track: trackLabel(d, tr), start: r3(tin), end: r3(end), gain_db: vol, ...(r.level != null ? { level_vs_narration_db: r.level } : {}), ...(duckDepth != null ? { ducks_by_db: duckDepth } : {}), clips: made });
     } catch (e: any) {
       skip(e.message);
     }
   }
-  const depths = [...new Set(toDuck.map((x) => x.depth ?? 15))];
-  for (const depth of depths) duck(d, { clip_ids: toDuck.filter((x) => (x.depth ?? 15) === depth).map((x) => x.clip), depth_db: depth });
-  return { rows: rows.length, placed, skipped, ducked: toDuck.map((x) => x.clip), to_snap: toSnap };
+  const depths = [...new Set(toDuck.map((x) => x.depth))];
+  for (const depth of depths) duck(d, { clip_ids: toDuck.filter((x) => x.depth === depth).map((x) => x.clip), depth_db: depth });
+  return { rows: rows.length, placed, skipped, notes, ducked: toDuck.map((x) => x.clip), to_snap: toSnap, to_phrase: toPhrase };
+}
+
+/** Integrated loudness of `clips` alone (zero: at 0 dB with their gain, envelopes and fades taken off), over [a, b). */
+export async function soloLoudness(p: Project, clips: Clip[], o: { zero?: boolean; a?: number; b?: number } = {}) {
+  if (!clips.length) return null;
+  const q = structuredClone(p);
+  const keep = new Set(clips.map((c) => c.id));
+  q.clips = q.clips.filter((c) => keep.has(c.id));
+  for (const t of q.tracks) {
+    t.muted = false;
+    t.solo = false;
+    if (o.zero) t.volume = 0;
+  }
+  if (o.zero)
+    for (const c of q.clips) {
+      c.volume = 0;
+      if (c.keyframes) delete c.keyframes.volume;
+      c.fadeIn = 0;
+      c.fadeOut = 0;
+      c.meta = undefined;
+    }
+  const A = Math.max(o.a ?? -Infinity, Math.min(...clips.map((c) => c.start)));
+  const B = Math.min(o.b ?? Infinity, Math.max(...clips.map((c) => clipEnd(c))));
+  if (!(B > A)) return null;
+  const meter = await measureTimeline(q, A, B, renderMix);
+  const v = meter.integrated();
+  return Number.isFinite(v) ? v : null;
+}
+
+/** Narration clips (A3 Narration, or the 0.2.33 layout's A1 Narration) */
+export function narrationClips(p: Project) {
+  const t = p.tracks.find((x) => x.kind === 'audio' && x.name === 'Narration') ?? tracksOf(p, 'audio')[2];
+  return t ? audioClipsOn(p, t).filter((c) => c.enabled) : [];
 }
 
 // ---------------- beats ----------------

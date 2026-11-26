@@ -368,8 +368,9 @@ export const TOOL_DEFS = [
     name: 'detect_silence',
     where: 'main',
     description:
-      'Find silent parts. With media_id or clip_id: in that media (ranges in source time and, for clips, timeline time, ready for ripple_delete_ranges). With neither: in the whole timeline mix as it will be exported (detect_silences), each with the chapter card / raw clip / hold it falls under.',
+      'Find silent parts. With media_id or clip_id: in that media (ranges in source time and, for clips, timeline time, ready for ripple_delete_ranges). With sequence: true (or neither id): in the program mix as it will be exported (detect_silences), optionally over start/end, in timeline time, each with the chapter card / raw clip / hold it falls under.',
     shape: {
+      sequence: z.boolean().optional().describe('true: the program mix of the whole sequence (or start/end), timeline times'),
       media_id: z.string().optional(),
       clip_id: z.string().optional(),
       threshold_db: z.number().optional().describe('Noise floor, default -35 (-45 for the timeline mix)'),
@@ -381,8 +382,17 @@ export const TOOL_DEFS = [
   {
     name: 'detect_scenes',
     where: 'main',
-    description: 'Detect shot changes / scene cuts in a video media item or clip. Returns cut times (source, and timeline for clips).',
-    shape: { media_id: z.string().optional(), clip_id: z.string().optional(), threshold: z.number().optional().describe('0-1, default 0.3') },
+    description:
+      'Detect shot changes / scene cuts in a video media item or clip (cut times in source, and timeline for clips). With sequence: true: in the program output over start/end — the edit points of the picture on screen plus the cuts inside its footage, in timeline time, with every shot length, the average and median shot length and the longest holds.',
+    shape: {
+      sequence: z.boolean().optional().describe('true: the program output of the sequence (or start/end), timeline times, shot lengths and holds'),
+      media_id: z.string().optional(),
+      clip_id: z.string().optional(),
+      threshold: z.number().optional().describe('0-1, default 0.3'),
+      start: z.number().optional().describe('sequence: from (s)'),
+      end: z.number().optional().describe('sequence: to (s)'),
+      hold_s: z.number().optional().describe('sequence: shots longer than this are listed as holds, default 20'),
+    },
   },
   {
     name: 'transcribe',
@@ -403,8 +413,9 @@ export const TOOL_DEFS = [
     name: 'analyze_loudness',
     where: 'main',
     description:
-      'Measure loudness (EBU R128): with media_id that file (FFmpeg); without it the timeline mix as it will be exported, optionally over start/end: integrated LUFS, true peak, loudness range, and short-term LUFS for every second.',
+      'Measure loudness (EBU R128): with media_id that file (FFmpeg); with sequence: true (or without media_id) the timeline mix rendered as it will be exported, optionally over start/end: integrated LUFS, true peak, loudness range (LRA), and short-term LUFS for every second.',
     shape: {
+      sequence: z.boolean().optional().describe('true: render and measure the timeline mix (start/end), even when media_id is given'),
       media_id: z.string().optional(),
       start: z.number().optional(),
       end: z.number().optional(),
@@ -488,8 +499,9 @@ export const TOOL_DEFS = [
     shape: {
       path: z.string().optional().describe('Absolute output path (with a preset, default: exports/<project> (<preset>).mp4 next to the project)'),
       preset: z.enum(['final_1080p', 'final_4k', 'proxy_720p', 'short_9x16']).optional(),
-      target_lufs: z.number().optional().describe('Normalise the mix to this integrated loudness (e.g. -14)'),
-      true_peak: z.number().optional().describe('With target_lufs: true-peak ceiling in dBTP, default -1'),
+      loudness_target: z.number().optional().describe('Normalise the final mix to this integrated loudness in LUFS, e.g. -14 (two passes: measure, then gain and true-peak limit)'),
+      target_lufs: z.number().optional().describe('Same as loudness_target'),
+      true_peak: z.number().optional().describe('With loudness_target: true-peak ceiling in dBTP, e.g. -1 (default -1)'),
       normalize: z.boolean().optional().describe('false: skip the sequence loudness target for this export'),
       format: z.enum(['mp4-h264', 'mp4-h265', 'mp4-av1', 'webm-vp9', 'mov-prores', 'mov-dnxhr', 'gif', 'mp3', 'm4a-aac', 'wav', 'flac']).optional(),
       quality: z.number().optional().describe('CRF-like, lower = better, default 18 (ignored with bitrate_mbps)'),
@@ -512,6 +524,18 @@ export const TOOL_DEFS = [
     description: 'Save the project (.icut). Without a path saves to the current file (or asks the user).',
     shape: { path: z.string().optional() },
   },
+  {
+    name: 'list_skills',
+    where: 'main',
+    description: 'The skills that ship with IngrainedCut (workflows to load before a kind of job, e.g. fraggedin-documentary-editor for documentaries): name and description of each.',
+    shape: {},
+  },
+  {
+    name: 'get_skill',
+    where: 'main',
+    description: 'The full SKILL.md of a bundled skill. Read it and follow it as your instructions for that kind of job.',
+    shape: { name: z.string().describe('Skill name from list_skills, e.g. "fraggedin-documentary-editor"') },
+  },
   ...DOC_TOOLS,
 ];
 
@@ -520,7 +544,7 @@ const WRITES = new Set([
   'add_clip', 'add_text', 'add_captions', 'add_color_matte', 'add_adjustment_layer', 'move_clip', 'trim_clip', 'split_clip', 'delete_clips', 'ripple_delete_range',
   'ripple_delete_ranges', 'close_gaps', 'set_clip_properties', 'add_transition', 'remove_transition', 'set_keyframes', 'manage_tracks', 'markers', 'set_sequence_settings',
   'batch', 'import_edl', 'import_cues', 'project_template', 'set_motion', 'j_cut', 'l_cut', 'add_text_card', 'add_panel', 'duck', 'breath', 'mute_music_under', 'fade',
-  'snap_to_beat', 'ambience_fill', 'normalize', 'restore',
+  'snap_to_beat', 'ambience_fill', 'normalize', 'restore', 'duck_audio', 'jl_cut', 'link_clips', 'unlink_clips', 'add_card',
 ]);
 for (const d of TOOL_DEFS) if (WRITES.has(d.name) && !d.shape.dry_run) d.shape.dry_run = z.boolean().optional().describe('Only report what would change; change nothing');
 
@@ -530,4 +554,5 @@ export const SERVER_INSTRUCTIONS = `IngrainedCut is a non-linear video editor (P
 Conventions: all times are seconds (floats); tracks are named V1, V2… (V1 is the bottom video layer, higher numbers draw on top) and A1, A2…; clip ids look like "c12", media ids like "m3". A video clip and its audio are "linked" (same link id) and move/trim/split together.
 Workflow: read state (get_project_state), make edits (prefer batch / ripple_delete_ranges for many changes), then verify visually with capture_frame or capture_contact_sheet. Every tool call is one undo step for the user.
 Common jobs: cut out dead air with remove_silence (dry_run first to see the ranges); line up multicam / external-mic recordings with sync_clips (method "audio"); split at shot changes with detect_scenes + split_clip; grade with set_clip_properties → color_grade (exposure, highlights/shadows/whites/blacks, vibrance, wheels, curves), effects.temperature/tint/contrast/saturation and look (built-in LUTs), or auto_color as a starting point — grade one clip, then apply the same properties to matching clips, and check with capture_frame.
-${DOC_INSTRUCTIONS}`;
+${DOC_INSTRUCTIONS}
+Skills: for documentaries and gaming video essays, load the fraggedin-documentary-editor skill first (get_skill, or your own Skill tool if it is installed) and follow it.`;

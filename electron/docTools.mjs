@@ -34,6 +34,30 @@ export function findStyle(explicit, ...dirs) {
   return { path: null, text: '' };
 }
 
+const MEDIA_FILE = /\.(mp4|mov|mkv|webm|m4v|avi|wav|mp3|m4a|aac|flac|ogg|opus|png|jpe?g|webp)$/i;
+
+/** Media files under `dir` (relative paths with /, a few folders deep), for cues that name a track title. */
+export function mediaFilesUnder(dir, depth = 3, max = 3000) {
+  const out = [];
+  const walk = (d, rel, n) => {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (out.length >= max) return;
+      if (e.name.startsWith('.') || e.name === 'node_modules') continue;
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory() && n > 0) walk(path.join(d, e.name), r, n - 1);
+      else if (e.isFile() && MEDIA_FILE.test(e.name)) out.push(r);
+    }
+  };
+  walk(dir, '', depth);
+  return out;
+}
+
 export function createDocTools({ callRenderer, emit }) {
   const rjson = (res) => {
     const t = res?.content?.find((c) => c.type === 'text')?.text ?? '';
@@ -73,7 +97,8 @@ export function createDocTools({ callRenderer, emit }) {
   async function withFile(name, args) {
     const extra = {};
     if (name === 'import_edl' || name === 'import_cues' || name === 'check_edl') extra._text = readText(args.path, name === 'import_cues' ? 'cue sheet' : 'EDL');
-    if (name === 'import_edl' || name === 'add_text_card') {
+    if (name === 'import_cues') extra._files = mediaFilesUnder(path.dirname(args.path));
+    if (name === 'import_edl' || name === 'add_text_card' || name === 'add_card') {
       const p = await project();
       const st = findStyle(args.style_path, args.path && path.dirname(args.path), projectDir(p));
       extra._style = st.text;
@@ -372,15 +397,27 @@ export function createDocTools({ callRenderer, emit }) {
     const p = await project();
     const dur = seqDur(p);
     const skip = new Set(args.skip ?? []);
+    const T = args.targets ?? {};
+    const target = {
+      hook_by_s: T.hook_by_s ?? args.hook_by_s ?? 30,
+      climax_range: T.climax_range ?? args.climax_range ?? [0.45, 0.7],
+      lufs: T.lufs ?? args.target_lufs ?? -14,
+      lufs_tolerance: T.lufs_tolerance ?? 1,
+      true_peak: T.true_peak ?? args.true_peak ?? -1,
+      max_hold_s: T.max_hold_s ?? args.max_hold_s ?? 20,
+      silence_near_s: T.silence_near_s ?? 3,
+      wpm: T.wpm ?? [130, 190],
+      still_s: T.still_s ?? 10,
+    };
     const checks = [];
     const issues = [];
     const add = (name, pass, detail) => checks.push({ check: name, pass, ...detail });
     const marker = (re, kind) => p.markers.filter((m) => m.kind === kind || re.test(m.name)).sort((x, y) => x.time - y.time)[0];
     // structure
-    const hookBy = args.hook_by_s ?? 30;
+    const hookBy = target.hook_by_s;
     const hook = marker(/\bhook\b/i, 'hook');
     add('hook', hook ? hook.time <= hookBy : null, hook ? { at: r3(hook.time), target: `by ${hookBy} s` } : { note: 'No marker named "Hook" (or kind hook): add one where the hook lands' });
-    const [c0, c1] = args.climax_range ?? [0.45, 0.7];
+    const [c0, c1] = target.climax_range;
     const climax = marker(/\bclimax\b/i, 'climax');
     add('climax', climax ? climax.time / dur >= c0 && climax.time / dur <= c1 : null, climax ? { at: r3(climax.time), at_pct: Math.round((climax.time / dur) * 100), target: `${c0 * 100}–${c1 * 100}% of ${fmt(dur)}` } : { note: 'No marker named "Climax" (or kind climax)' });
     const chapters = p.markers.filter((m) => m.kind === 'chapter').length;
@@ -395,27 +432,34 @@ export function createDocTools({ callRenderer, emit }) {
     };
     await run('loudness', async () => {
       const L = rjson(await callRenderer('analyze_loudness', { per_second: false }));
-      const tl = args.target_lufs ?? -14;
-      const tp = args.true_peak ?? -1;
+      const tl = target.lufs;
+      const tp = target.true_peak;
+      const tol = target.lufs_tolerance;
       const norm = p.settings.loudness;
-      if (norm) add('loudness', norm.lufs === tl && norm.truePeak <= tp, { mix_lufs: L.integrated_lufs, mix_true_peak: L.true_peak_dbtp, export_normalizes_to: `${norm.lufs} LUFS / ${norm.truePeak} dBTP`, target: `${tl} LUFS / ${tp} dBTP` });
+      if (norm) add('loudness', Math.abs(norm.lufs - tl) <= tol && norm.truePeak <= tp, { mix_lufs: L.integrated_lufs, mix_true_peak: L.true_peak_dbtp, export_normalizes_to: `${norm.lufs} LUFS / ${norm.truePeak} dBTP`, target: `${tl} ±${tol} LUFS / ≤ ${tp} dBTP` });
       else {
-        const ok = L.integrated_lufs != null && Math.abs(L.integrated_lufs - tl) <= 1 && (L.true_peak_dbtp ?? -99) <= tp;
-        add('loudness', ok, { integrated_lufs: L.integrated_lufs, true_peak_dbtp: L.true_peak_dbtp, loudness_range_lu: L.loudness_range_lu, target: `${tl} LUFS / ${tp} dBTP`, ...(ok ? {} : { fix: 'normalize (export applies it) or adjust gains' }) });
+        const ok = L.integrated_lufs != null && Math.abs(L.integrated_lufs - tl) <= tol && (L.true_peak_dbtp ?? -99) <= tp;
+        add('loudness', ok, { integrated_lufs: L.integrated_lufs, true_peak_dbtp: L.true_peak_dbtp, loudness_range_lu: L.loudness_range_lu, target: `${tl} ±${tol} LUFS / ≤ ${tp} dBTP`, ...(ok ? {} : { fix: 'export_video with loudness_target (or normalize), or adjust the track gains' }) });
+        if (!ok && L.integrated_lufs != null) issues.push({ at: 0, type: 'loudness', detail: `mix at ${L.integrated_lufs} LUFS integrated, true peak ${L.true_peak_dbtp} dBTP (target ${tl} ±${tol} LUFS, ≤ ${tp} dBTP)` });
       }
     });
     await run('silences', async () => {
-      const S = rjson(await callRenderer('detect_silence', { threshold_db: -45, min_duration: 0.4 }));
-      const raws = p.clips.filter((c) => c.meta?.role === 'raw');
+      const S = rjson(await callRenderer('detect_silence', { sequence: true, threshold_db: -45, min_duration: 0.4 }));
+      const near = target.silence_near_s;
+      // Reference I: silences only under chapter cards (near a chapter marker) and around marked holds (the money clip)
       const cards = p.clips.filter((c) => c.meta?.preset === 'chapter_card');
+      const holds = [
+        ...p.markers.filter((m) => m.kind === 'hold').map((m) => [m.time, m.time + (m.duration || 0)]),
+        ...p.clips.filter((c) => c.meta?.hold).map((c) => [c.start, clipEnd(c)]),
+      ];
       const bad = S.silences.filter((s) => {
-        if (s.start < 0.5 || s.end > dur - 0.5) return false;
-        if (cards.some((c) => c.start - 3 <= s.end && clipEnd(c) + 3 >= s.start)) return false;
-        if (raws.some((c) => c.start - 2 <= s.end && clipEnd(c) + 2 >= s.start)) return false;
-        if (p.markers.some((m) => m.kind === 'chapter' && Math.abs(m.time - s.start) < 4)) return false;
-        return !holdCovered(p, s.start, s.end);
+        // a short breath at the very start or end of the video is fine; a long one is not
+        if ((s.start < 0.5 || s.end > dur - 0.5) && s.length <= 2) return false;
+        if (p.markers.some((m) => m.kind === 'chapter' && m.time - near <= s.end && m.time + near >= s.start)) return false;
+        if (cards.some((c) => c.start - near <= s.end && clipEnd(c) + near >= s.start)) return false;
+        return !holds.some(([a, b]) => a - near <= s.end && b + near >= s.start);
       });
-      add('silences', bad.length === 0, { total: S.count, outside_cards_and_raw_clips: bad.length });
+      add('silences', bad.length === 0, { total: S.count, away_from_chapters_and_holds: bad.length, allowed_within_s: near });
       // silences less than a second apart (between sound effects, say) are one issue
       const groups = [];
       for (const s of bad) {
@@ -430,26 +474,28 @@ export function createDocTools({ callRenderer, emit }) {
         issues.push({
           at: g.start,
           type: 'silence',
-          detail: g.n === 1 ? `${r3(g.total)} s of silence (${fmt(g.start)}–${fmt(g.end)}) not under a chapter card or raw clip` : `${g.n} gaps of silence (${r3(g.total)} s in all) between ${fmt(g.start)} and ${fmt(g.end)}, not under a chapter card or raw clip`,
+          detail: g.n === 1 ? `${r3(g.total)} s of silence (${fmt(g.start)}–${fmt(g.end)}) away from any chapter marker or marked hold` : `${g.n} gaps of silence (${r3(g.total)} s in all) between ${fmt(g.start)} and ${fmt(g.end)}, away from any chapter marker or marked hold`,
         });
     });
     await run('cuts', async () => {
-      const C = await detectCuts({ hold_s: args.max_hold_s ?? 20 }, p);
+      const C = await detectCuts({ hold_s: target.max_hold_s }, p);
       add('holds', C.unmarked_holds === 0, { average_shot_length: C.average_shot_length, median_shot_length: C.median_shot_length, shots: C.shots, unmarked_holds_over: `${C.holds_over} s: ${C.unmarked_holds}` });
       for (const h of C.holds.filter((x) => !x.deliberate)) issues.push({ at: h.start, type: 'hold', detail: `${h.length} s without a cut (${fmt(h.start)}–${fmt(h.end)}, ${h.clip})${h.has_motion ? ', has a camera move' : ''}: cut it or mark it with a hold marker` });
     });
     await run('freezes', async () => {
-      const F = await detectFreezesTool({ min_s: 10 }, p);
+      const F = await detectFreezesTool({ min_s: target.still_s }, p);
       add('freezes', F.unintended === 0, { found: F.freezes.length, unintended: F.unintended });
       for (const f of F.freezes.filter((x) => !x.deliberate)) issues.push({ at: f.start, type: 'freeze', detail: `${f.kind} for ${f.length} s (${fmt(f.start)}–${fmt(f.end)})${f.clip ? `, ${f.clip}` : ''}${f.overlays ? ' (a panel is over it)' : ''}` });
     });
     await run('transcript', async () => {
-      const narr = findTrack(p, 'narration');
-      if (!narr || !p.clips.some((c) => c.trackId === narr.id)) return add('transcript', null, { note: 'No Narration track with clips' });
+      const narr = findTrack(p, 'narration') ?? findTrack(p, 'A3');
+      if (!narr || !p.clips.some((c) => c.trackId === narr.id)) return add('pace', null, { note: 'No narration clips on A3 (Narration)' });
       if (!getSettings().whisperModel) return add('transcript', null, { note: 'No Whisper model set (Settings → Transcription)' });
       const { out } = await transcribeTrack({ track: narr.id, script_path: args.script_path }, p);
       const wpm = out.words_per_minute;
-      add('pace', wpm >= 130 && wpm <= 180, { words_per_minute: wpm, words_per_speaking_minute: out.words_per_speaking_minute, longest_pauses: out.longest_pauses.slice(0, 5), target: '130–180 wpm' });
+      const [w0, w1] = target.wpm;
+      add('pace', wpm >= w0 && wpm <= w1, { track: out.track, words: out.word_count, words_per_minute: wpm, words_per_speaking_minute: out.words_per_speaking_minute, longest_pauses: out.longest_pauses.slice(0, 5), target: `${w0}–${w1} wpm (Reference E: ~170)` });
+      if (!(wpm >= w0 && wpm <= w1)) issues.push({ at: out.segments[0]?.start ?? 0, type: 'pace', detail: `narration at ${wpm} words per minute (target ${w0}–${w1})` });
       if (out.script?.match_pct != null) {
         add('script', out.script.match_pct >= 97, { match_pct: out.script.match_pct, missing_words: out.script.missing_words, extra_words: out.script.extra_words });
         for (const r of out.script.missing.filter((x) => x.text.split(' ').length >= 3).slice(0, 15)) issues.push({ at: r.near, type: 'script', detail: `Not in the narration: “${r.text}”` });
@@ -476,6 +522,8 @@ export function createDocTools({ callRenderer, emit }) {
     const failed = checks.filter((c) => c.pass === false).length;
     return {
       runtime: fmt(dur),
+      targets: target,
+      pass: failed === 0 && passed > 0,
       summary: `${passed} passed, ${failed} failed, ${checks.length - passed - failed} not checked`,
       checks,
       issues: issues.map((x) => ({ ...x, at: r3(x.at), timecode: fmt(x.at) })),
@@ -608,9 +656,14 @@ export function createDocTools({ callRenderer, emit }) {
       case 'import_cues':
       case 'check_edl':
       case 'add_text_card':
+      case 'add_card':
         return withFile(name, args);
       case 'detect_cuts':
         return text(await detectCuts(args));
+      case 'detect_scenes':
+        // sequence: the program output (edit points + cuts inside the footage on screen), in timeline time
+        if (!args.sequence) return null;
+        return text({ sequence: true, ...(await detectCuts({ threshold: (args.threshold ?? 0.3) * 100, start: args.start, end: args.end, hold_s: args.hold_s })) });
       case 'detect_freezes':
         return text(await detectFreezesTool(args));
       case 'qa_report':

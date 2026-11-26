@@ -71,6 +71,7 @@ export class CliAgent {
     this.gen = 0;
     this.aborted = false;
     this.seenTools = new Set();
+    this.turnNo = 0;
   }
   emit(ev) {
     this.o.emit('agent:event', ev);
@@ -89,6 +90,7 @@ export class CliAgent {
       const msg = this.queue.shift();
       const started = Date.now();
       this.aborted = false;
+      this.beginTurn();
       try {
         const r = await this.turn(msg);
         if (gen !== this.gen) return;
@@ -107,6 +109,16 @@ export class CliAgent {
     if (gen !== this.gen) return;
     this.busy = false;
     this.emit({ type: 'idle' });
+  }
+
+  /**
+   * Codex numbers its items from item_0 again in every turn (a new CLI run per message), so ids are only unique within
+   * a turn: each turn starts with a clean slate and a key that makes its ids unique in the chat.
+   */
+  beginTurn() {
+    this.turnNo++;
+    this.turnKey = `${Date.now().toString(36)}${this.turnNo}`;
+    this.seenTools.clear();
   }
 
   /** Emit tool_use once per call id, then tool_result when it finishes. */
@@ -277,7 +289,14 @@ export class CodexAgent extends CliAgent {
     return { usage };
   }
 
-  item(done, it) {
+  beginTurn() {
+    super.beginTurn();
+    this.textLen.clear();
+  }
+
+  item(done, it0) {
+    // item ids restart at item_0 in every turn: make them unique for the chat panel, which matches tool rows by id
+    const it = { ...it0, id: `${this.turnKey}-${it0.id}` };
     switch (it.type) {
       case 'agent_message': {
         const prev = this.textLen.get(it.id) ?? 0;

@@ -12,7 +12,9 @@
     "mcp": "node mcp/server.mjs",
     "web": "vite build && node server/web.mjs",
     "web:serve": "node server/web.mjs",
-    "helper": "node server/web.mjs"
+    "helper": "node server/web.mjs",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "node --test --test-concurrency=1 \"tests/*.test.mjs\""
   },
   "license": "AGPL-3.0-or-later",
   "dependencies": {
@@ -43,6 +45,7 @@
     "server",
     "electron",
     "mcp",
+    "skills",
     "dist",
     "build",
     "README.md",

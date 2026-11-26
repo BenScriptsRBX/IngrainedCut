@@ -1,0 +1,748 @@
+{
+ "get_project_state": {
+  "required": [],
+  "params": [
+   "detail"
+  ]
+ },
+ "import_media": {
+  "required": [
+   "paths"
+  ],
+  "params": [
+   "paths"
+  ]
+ },
+ "add_clip": {
+  "required": [],
+  "params": [
+   "audio_track",
+   "credit",
+   "dry_run",
+   "duration",
+   "include_audio",
+   "include_video",
+   "media_id",
+   "mode",
+   "path",
+   "source_in",
+   "source_out",
+   "start",
+   "track",
+   "volume_db"
+  ]
+ },
+ "add_text": {
+  "required": [
+   "duration",
+   "start",
+   "text"
+  ],
+  "params": [
+   "dry_run",
+   "duration",
+   "fade_in",
+   "fade_out",
+   "start",
+   "style",
+   "text",
+   "track",
+   "transform"
+  ]
+ },
+ "add_color_matte": {
+  "required": [
+   "color",
+   "duration",
+   "start"
+  ],
+  "params": [
+   "color",
+   "dry_run",
+   "duration",
+   "start",
+   "track"
+  ]
+ },
+ "add_adjustment_layer": {
+  "required": [
+   "duration",
+   "start"
+  ],
+  "params": [
+   "dry_run",
+   "duration",
+   "effects",
+   "start",
+   "track"
+  ]
+ },
+ "move_clip": {
+  "required": [
+   "clip_id"
+  ],
+  "params": [
+   "clip_id",
+   "dry_run",
+   "move_linked",
+   "start",
+   "track"
+  ]
+ },
+ "trim_clip": {
+  "required": [
+   "clip_id"
+  ],
+  "params": [
+   "clip_id",
+   "dry_run",
+   "new_end",
+   "new_start",
+   "ripple"
+  ]
+ },
+ "sync_clips": {
+  "required": [
+   "clip_ids"
+  ],
+  "params": [
+   "clip_ids",
+   "link",
+   "method",
+   "reference_clip_id"
+  ]
+ },
+ "remove_silence": {
+  "required": [],
+  "params": [
+   "clip_ids",
+   "dry_run",
+   "min_duration",
+   "padding",
+   "threshold_db"
+  ]
+ },
+ "auto_color": {
+  "required": [
+   "clip_id"
+  ],
+  "params": [
+   "clip_id"
+  ]
+ },
+ "split_clip": {
+  "required": [
+   "time"
+  ],
+  "params": [
+   "clip_id",
+   "dry_run",
+   "time",
+   "track"
+  ]
+ },
+ "delete_clips": {
+  "required": [
+   "clip_ids"
+  ],
+  "params": [
+   "clip_ids",
+   "dry_run",
+   "include_linked",
+   "ripple"
+  ]
+ },
+ "ripple_delete_range": {
+  "required": [
+   "end",
+   "start"
+  ],
+  "params": [
+   "dry_run",
+   "end",
+   "start",
+   "tracks"
+  ]
+ },
+ "ripple_delete_ranges": {
+  "required": [
+   "ranges"
+  ],
+  "params": [
+   "dry_run",
+   "ranges",
+   "tracks"
+  ]
+ },
+ "close_gaps": {
+  "required": [],
+  "params": [
+   "dry_run",
+   "tracks"
+  ]
+ },
+ "set_clip_properties": {
+  "required": [
+   "clip_ids",
+   "properties"
+  ],
+  "params": [
+   "clip_ids",
+   "dry_run",
+   "properties"
+  ]
+ },
+ "add_transition": {
+  "required": [],
+  "params": [
+   "clip_ids",
+   "dry_run",
+   "duration",
+   "edge",
+   "from_clip_id",
+   "to_clip_id",
+   "type"
+  ]
+ },
+ "remove_transition": {
+  "required": [
+   "clip_ids"
+  ],
+  "params": [
+   "clip_ids",
+   "dry_run",
+   "edge"
+  ]
+ },
+ "set_keyframes": {
+  "required": [
+   "clip_id",
+   "keyframes",
+   "property"
+  ],
+  "params": [
+   "clip_id",
+   "dry_run",
+   "keyframes",
+   "property"
+  ]
+ },
+ "manage_tracks": {
+  "required": [
+   "action"
+  ],
+  "params": [
+   "action",
+   "dry_run",
+   "hidden",
+   "kind",
+   "locked",
+   "muted",
+   "solo",
+   "track",
+   "volume_db"
+  ]
+ },
+ "markers": {
+  "required": [
+   "action"
+  ],
+  "params": [
+   "action",
+   "color",
+   "dry_run",
+   "duration",
+   "kind",
+   "marker_id",
+   "name",
+   "note",
+   "time"
+  ]
+ },
+ "set_playhead": {
+  "required": [],
+  "params": [
+   "in_point",
+   "out_point",
+   "time"
+  ]
+ },
+ "select_clips": {
+  "required": [
+   "clip_ids"
+  ],
+  "params": [
+   "clip_ids"
+  ]
+ },
+ "set_sequence_settings": {
+  "required": [],
+  "params": [
+   "background",
+   "dry_run",
+   "fps",
+   "height",
+   "name",
+   "width"
+  ]
+ },
+ "capture_frame": {
+  "required": [],
+  "params": [
+   "time",
+   "width"
+  ]
+ },
+ "capture_contact_sheet": {
+  "required": [],
+  "params": [
+   "cols",
+   "count",
+   "end",
+   "every_s",
+   "media_id",
+   "save_path",
+   "start",
+   "times",
+   "width"
+  ]
+ },
+ "screenshot_editor": {
+  "required": [],
+  "params": []
+ },
+ "detect_silence": {
+  "required": [],
+  "params": [
+   "clip_id",
+   "end",
+   "media_id",
+   "min_duration",
+   "start",
+   "threshold_db"
+  ]
+ },
+ "detect_scenes": {
+  "required": [],
+  "params": [
+   "clip_id",
+   "media_id",
+   "threshold"
+  ]
+ },
+ "transcribe": {
+  "required": [],
+  "params": [
+   "clip_id",
+   "language",
+   "media_id",
+   "pause_s",
+   "script_path",
+   "track",
+   "words"
+  ]
+ },
+ "analyze_loudness": {
+  "required": [],
+  "params": [
+   "end",
+   "media_id",
+   "per_second",
+   "start"
+  ]
+ },
+ "download_media": {
+  "required": [
+   "url"
+  ],
+  "params": [
+   "audio_only",
+   "end",
+   "max_height",
+   "name",
+   "place",
+   "start",
+   "timeline_start",
+   "track",
+   "url"
+  ]
+ },
+ "add_captions": {
+  "required": [
+   "segments"
+  ],
+  "params": [
+   "dry_run",
+   "segments",
+   "style",
+   "y"
+  ]
+ },
+ "render_composition": {
+  "required": [
+   "project_dir"
+  ],
+  "params": [
+   "format",
+   "include_audio",
+   "name",
+   "place",
+   "project_dir",
+   "quality",
+   "replace_media_id",
+   "start",
+   "track"
+  ]
+ },
+ "relink_media": {
+  "required": [
+   "media_id",
+   "path"
+  ],
+  "params": [
+   "media_id",
+   "path"
+  ]
+ },
+ "undo": {
+  "required": [],
+  "params": [
+   "steps"
+  ]
+ },
+ "redo": {
+  "required": [],
+  "params": [
+   "steps"
+  ]
+ },
+ "batch": {
+  "required": [
+   "operations"
+  ],
+  "params": [
+   "dry_run",
+   "operations"
+  ]
+ },
+ "export_video": {
+  "required": [],
+  "params": [
+   "audio_kbps",
+   "bit_depth",
+   "bitrate_mbps",
+   "dnxhr_profile",
+   "encoder",
+   "format",
+   "fps",
+   "height",
+   "normalize",
+   "path",
+   "preset",
+   "prores_profile",
+   "quality",
+   "range",
+   "sample_rate",
+   "scale",
+   "target_lufs",
+   "true_peak"
+  ]
+ },
+ "save_project": {
+  "required": [],
+  "params": [
+   "path"
+  ]
+ },
+ "get_timeline": {
+  "required": [],
+  "params": [
+   "track"
+  ]
+ },
+ "import_edl": {
+  "required": [
+   "path"
+  ],
+  "params": [
+   "dry_run",
+   "path",
+   "replace",
+   "style_path",
+   "template"
+  ]
+ },
+ "import_cues": {
+  "required": [
+   "path"
+  ],
+  "params": [
+   "dry_run",
+   "path",
+   "replace",
+   "template"
+  ]
+ },
+ "check_edl": {
+  "required": [
+   "path"
+  ],
+  "params": [
+   "path",
+   "tolerance_frames"
+  ]
+ },
+ "project_template": {
+  "required": [],
+  "params": [
+   "dry_run",
+   "template"
+  ]
+ },
+ "set_motion": {
+  "required": [
+   "type"
+  ],
+  "params": [
+   "amount_pct",
+   "clip_id",
+   "clip_ids",
+   "direction",
+   "dry_run",
+   "ease",
+   "type"
+  ]
+ },
+ "j_cut": {
+  "required": [
+   "clip_id"
+  ],
+  "params": [
+   "clip_id",
+   "dry_run",
+   "frames"
+  ]
+ },
+ "l_cut": {
+  "required": [
+   "clip_id"
+  ],
+  "params": [
+   "clip_id",
+   "dry_run",
+   "frames"
+  ]
+ },
+ "add_text_card": {
+  "required": [
+   "at",
+   "preset",
+   "text"
+  ],
+  "params": [
+   "at",
+   "chapter_marker",
+   "dry_run",
+   "dur",
+   "preset",
+   "style_path",
+   "subtitle",
+   "text"
+  ]
+ },
+ "add_panel": {
+  "required": [
+   "at",
+   "src"
+  ],
+  "params": [
+   "at",
+   "blur",
+   "dim",
+   "dry_run",
+   "dur",
+   "position",
+   "push_pct",
+   "scale",
+   "source_in",
+   "src"
+  ]
+ },
+ "duck": {
+  "required": [],
+  "params": [
+   "attack_ms",
+   "clip_ids",
+   "depth_db",
+   "dry_run",
+   "hold_s",
+   "key_track",
+   "music_track",
+   "release_ms",
+   "remove",
+   "threshold_db"
+  ]
+ },
+ "breath": {
+  "required": [
+   "at"
+  ],
+  "params": [
+   "at",
+   "depth_db",
+   "dry_run",
+   "dur",
+   "except",
+   "fade_out_s",
+   "release_s",
+   "remove",
+   "tracks"
+  ]
+ },
+ "mute_music_under": {
+  "required": [],
+  "params": [
+   "clip_id",
+   "depth_db",
+   "dry_run",
+   "end",
+   "fade_s",
+   "music_track",
+   "remove",
+   "start"
+  ]
+ },
+ "fade": {
+  "required": [],
+  "params": [
+   "clip_id",
+   "clip_ids",
+   "curve",
+   "dry_run",
+   "in_s",
+   "out_s"
+  ]
+ },
+ "beat_grid": {
+  "required": [],
+  "params": [
+   "clip_id",
+   "detail",
+   "markers",
+   "track"
+  ]
+ },
+ "snap_to_beat": {
+  "required": [
+   "clip_id"
+  ],
+  "params": [
+   "clip_id",
+   "dry_run",
+   "edge",
+   "grid",
+   "max_shift",
+   "mode",
+   "music_clip_id",
+   "target",
+   "track"
+  ]
+ },
+ "ambience_fill": {
+  "required": [],
+  "params": [
+   "dry_run",
+   "end",
+   "fade_s",
+   "level_db",
+   "min_gap",
+   "only_under",
+   "src",
+   "start",
+   "track"
+  ]
+ },
+ "normalize": {
+  "required": [],
+  "params": [
+   "dry_run",
+   "off",
+   "target_lufs",
+   "true_peak"
+  ]
+ },
+ "detect_cuts": {
+  "required": [],
+  "params": [
+   "end",
+   "hold_s",
+   "scan_sources",
+   "start",
+   "threshold"
+  ]
+ },
+ "detect_freezes": {
+  "required": [],
+  "params": [
+   "end",
+   "min_s",
+   "noise_db",
+   "start"
+  ]
+ },
+ "qa_report": {
+  "required": [],
+  "params": [
+   "climax_range",
+   "edl_path",
+   "hook_by_s",
+   "max_hold_s",
+   "script_path",
+   "skip",
+   "target_lufs",
+   "true_peak"
+  ]
+ },
+ "export_chapters": {
+  "required": [],
+  "params": [
+   "intro_title",
+   "path"
+  ]
+ },
+ "export_credits": {
+  "required": [],
+  "params": [
+   "path",
+   "with_times"
+  ]
+ },
+ "make_short": {
+  "required": [
+   "end",
+   "start"
+  ],
+  "params": [
+   "caption_track",
+   "captions",
+   "end",
+   "layout",
+   "path",
+   "start",
+   "title"
+  ]
+ },
+ "snapshot": {
+  "required": [],
+  "params": [
+   "label"
+  ]
+ },
+ "restore": {
+  "required": [],
+  "params": [
+   "dry_run",
+   "id"
+  ]
+ }
+}

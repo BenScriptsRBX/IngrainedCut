@@ -1,0 +1,2 @@
+# bundled skills ship byte for byte (they are installed by content hash, see electron/skills.mjs)
+skills/** -text
